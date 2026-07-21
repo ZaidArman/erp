@@ -50,3 +50,25 @@ button.small { padding: .3rem .6rem; font-size: .78rem; }
 .perm-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: .4rem; }
 .perm-grid label { display: flex; align-items: center; gap: .4rem; font-size: .82rem; margin: 0; }
 .perm-grid input { width: auto; }
+
+/* ---- Phase 3: receipt (80mm thermal friendly) ---- */
+.receipt { background: #fff; width: 300px; padding: 14px 16px; font-family: "Courier New", monospace; font-size: 12px; color: #000; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,.06); }
+.r-center { text-align: center; }
+.r-bold { font-weight: 700; }
+.r-lg { font-size: 14px; }
+.r-mono { font-family: inherit; }
+.r-row { display: flex; justify-content: space-between; gap: 8px; }
+.r-line { border-top: 1px dashed #000; margin: 6px 0; }
+
+@media print {
+  body * { visibility: hidden; }
+  .print-area, .print-area * { visibility: visible; }
+  .print-area { position: absolute; left: 0; top: 0; width: 80mm; box-shadow: none; border-radius: 0; padding: 2mm; }
+  .no-print { display: none !important; }
+}
+
+/* ---- Phase 4: simple bar chart ---- */
+.chart { display: flex; align-items: flex-end; gap: 8px; height: 170px; padding-top: 8px; }
+.chart-col { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; flex: 1; max-width: 60px; height: 100%; }
+.chart-bar { width: 100%; background: #2e5e8c; border-radius: 4px 4px 0 0; min-height: 4px; }
+.chart-label { font-size: .68rem; color: #8a94a2; margin-top: 4px; }

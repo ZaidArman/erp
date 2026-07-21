@@ -33,6 +33,7 @@ class Command(BaseCommand):
         )
         perm, _ = EmployeePermission.objects.get_or_create(user=staff)
         perm.can_manage_inventory = True
+        perm.can_view_finance = False
         perm.can_use_pos = True
         perm.save()
 

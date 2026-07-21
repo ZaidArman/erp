@@ -4,7 +4,10 @@ import Branches from "./pages/Branches";
 import Dashboard from "./pages/Dashboard";
 import Employees from "./pages/Employees";
 import Login from "./pages/Login";
+import POS from "./pages/POS";
 import Products from "./pages/Products";
+import Reports from "./pages/Reports";
+import SalesHistory from "./pages/SalesHistory";
 import SimpleCrud from "./pages/SimpleCrud";
 import StockIntake from "./pages/StockIntake";
 import StockList from "./pages/StockList";
@@ -25,6 +28,8 @@ function Layout({ children }) {
       <nav className="sidebar">
         <div className="brand">Shop ERP</div>
         <NavLink to="/">Dashboard</NavLink>
+        {can("can_use_pos") && <NavLink to="/pos">Point of sale</NavLink>}
+        <NavLink to="/sales">Sales history</NavLink>
         <NavLink to="/stock">Stock</NavLink>
         {canInventory && (
           <>
@@ -35,6 +40,7 @@ function Layout({ children }) {
             <NavLink to="/suppliers">Suppliers</NavLink>
           </>
         )}
+        {can("can_view_reports") && <NavLink to="/reports">Reports</NavLink>}
         {isAdmin && (
           <>
             <NavLink to="/branches">Branches</NavLink>
@@ -66,6 +72,9 @@ export default function App() {
               <Layout>
                 <Routes>
                   <Route index element={<Dashboard />} />
+                  <Route path="pos" element={<POS />} />
+                  <Route path="sales" element={<SalesHistory />} />
+                  <Route path="reports" element={<Reports />} />
                   <Route path="stock" element={<StockList />} />
                   <Route path="stock/intake" element={<StockIntake />} />
                   <Route path="products" element={<Products />} />

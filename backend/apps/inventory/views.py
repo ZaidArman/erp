@@ -62,7 +62,13 @@ class ProductViewSet(TenantAwareViewSet):
 class SKUViewSet(TenantAwareViewSet):
     queryset = SKU.objects.select_related("product")
     serializer_class = SKUSerializer
-    permission_classes = [MANAGE_INVENTORY]
+
+    def get_permissions(self):
+        # Reads open to all shop members (POS cashiers need prices; matches
+        # the matrix row "View stock levels"). Writes need the inventory flag.
+        if self.action in ("list", "retrieve"):
+            return [IsAdminOrReadOnlyEmployee()]
+        return [MANAGE_INVENTORY()]
 
     def get_queryset(self):
         qs = super().get_queryset()
