@@ -10,13 +10,16 @@ from .models import SKU, Brand, Category, Product, StockUnit, Supplier
 class CategorySerializer(serializers.ModelSerializer):
     class Meta:
         model = Category
-        fields = ["id", "name"]
+        fields = ["id", "name", "attribute_schema"]
 
 
 class BrandSerializer(serializers.ModelSerializer):
+    category = TenantPKRelatedField(queryset=Category.objects.all())
+    category_name = serializers.CharField(source="category.name", read_only=True)
+
     class Meta:
         model = Brand
-        fields = ["id", "name"]
+        fields = ["id", "name", "category", "category_name"]
 
 
 class SupplierSerializer(serializers.ModelSerializer):
@@ -26,8 +29,10 @@ class SupplierSerializer(serializers.ModelSerializer):
 
 
 class ProductSerializer(serializers.ModelSerializer):
-    category = TenantPKRelatedField(queryset=Category.objects.all())
+    # Category now follows from the chosen brand (Category -> Brand -> Product),
+    # so it's derived server-side rather than picked independently.
     brand = TenantPKRelatedField(queryset=Brand.objects.all())
+    category = serializers.PrimaryKeyRelatedField(read_only=True)
     category_name = serializers.CharField(source="category.name", read_only=True)
     brand_name = serializers.CharField(source="brand.name", read_only=True)
     sku_count = serializers.IntegerField(source="skus.count", read_only=True)
@@ -40,6 +45,15 @@ class ProductSerializer(serializers.ModelSerializer):
             "brand", "brand_name",
             "sku_count",
         ]
+
+    def create(self, validated_data):
+        validated_data["category"] = validated_data["brand"].category
+        return super().create(validated_data)
+
+    def update(self, instance, validated_data):
+        if "brand" in validated_data:
+            validated_data["category"] = validated_data["brand"].category
+        return super().update(instance, validated_data)
 
 
 class SKUSerializer(serializers.ModelSerializer):
@@ -72,15 +86,55 @@ class StockUnitSerializer(serializers.ModelSerializer):
     sku_label = serializers.CharField(source="sku.__str__", read_only=True)
     branch_name = serializers.CharField(source="branch.name", read_only=True)
     supplier_name = serializers.CharField(source="supplier.name", read_only=True)
+    product_name = serializers.CharField(source="sku.product.name", read_only=True)
+    brand_name = serializers.CharField(source="sku.product.brand.name", read_only=True)
+    sell_price = serializers.DecimalField(
+        source="sku.sell_price", max_digits=12, decimal_places=2, read_only=True
+    )
 
     class Meta:
         model = StockUnit
         fields = [
-            "id", "sku", "sku_label", "branch", "branch_name",
+            "id", "sku", "sku_label", "product_name", "brand_name", "sell_price",
+            "branch", "branch_name",
             "supplier", "supplier_name", "imei_serial", "condition",
             "purchase_cost", "is_sold", "warranty_expiry",
         ]
         read_only_fields = ["is_sold"]
+
+
+class ProductReportSerializer(StockUnitSerializer):
+    """One row per physical stock unit, joined all the way up the hierarchy
+    (Category -> Brand -> Product -> SKU), plus who created/last touched the
+    row — derived from AuditLog since StockUnit itself doesn't store that."""
+
+    product_id = serializers.IntegerField(source="sku.product.id", read_only=True)
+    category_name = serializers.CharField(source="sku.product.category.name", read_only=True)
+    created_by_name = serializers.SerializerMethodField()
+    updated_by_name = serializers.SerializerMethodField()
+
+    class Meta(StockUnitSerializer.Meta):
+        fields = StockUnitSerializer.Meta.fields + [
+            "product_id", "category_name",
+            "created_at", "updated_at",
+            "created_by_name", "updated_by_name",
+        ]
+
+    def _audit_logs(self, obj):
+        # Populated once per request by the viewset (see ProductReportViewSet)
+        # to avoid one AuditLog query per row.
+        cache = self.context.get("audit_by_object_id")
+        if cache is None:
+            return []
+        return cache.get(str(obj.id), [])
+
+    def get_created_by_name(self, obj):
+        logs = [l for l in self._audit_logs(obj) if l.action == "create"]
+        return logs[0].user.full_name or logs[0].user.email if logs and logs[0].user else None
+
+    def get_updated_by_name(self, obj):
+        logs = self._audit_logs(obj)
+        return logs[0].user.full_name or logs[0].user.email if logs and logs[0].user else None
 
     def validate_purchase_cost(self, value):
         if value <= 0:

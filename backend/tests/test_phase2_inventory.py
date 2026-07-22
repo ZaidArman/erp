@@ -13,7 +13,7 @@ pytestmark = pytest.mark.django_db
 @pytest.fixture
 def catalog_a(tenant_a, branch_a):
     category = Category.objects.create(tenant=tenant_a, name="Mobiles")
-    brand = Brand.objects.create(tenant=tenant_a, name="Apple")
+    brand = Brand.objects.create(tenant=tenant_a, name="Apple", category=category)
     supplier = Supplier.objects.create(tenant=tenant_a, name="Karkhano Traders")
     product = Product.objects.create(
         tenant=tenant_a, category=category, brand=brand, name="iPhone 15 Pro"
@@ -39,6 +39,12 @@ class TestConstraints:
         Category.objects.create(tenant=tenant_b, name="Mobiles")
         assert Category.objects.filter(name="Mobiles").count() == 2
 
+    def test_duplicate_category_via_api_returns_clean_400(self, client_admin_a):
+        client_admin_a.post("/api/inventory/categories/", {"name": "Mobiles"})
+        res = client_admin_a.post("/api/inventory/categories/", {"name": "Mobiles"})
+        assert res.status_code == 400
+        assert "already exists" in res.json()["name"]
+
     def test_duplicate_imei_same_tenant_rejected(self, catalog_a, tenant_a):
         common = dict(
             tenant=tenant_a, sku=catalog_a["sku"], branch=catalog_a["branch"],
@@ -54,7 +60,7 @@ class TestConstraints:
             purchase_cost=100, imei_serial="IMEI-1",
         )
         category = Category.objects.create(tenant=tenant_b, name="Mobiles")
-        brand = Brand.objects.create(tenant=tenant_b, name="Apple")
+        brand = Brand.objects.create(tenant=tenant_b, name="Apple", category=category)
         product = Product.objects.create(
             tenant=tenant_b, category=category, brand=brand, name="iPhone 15 Pro"
         )
@@ -74,10 +80,12 @@ class TestConstraints:
 class TestFullChainAPI:
     def test_create_full_chain(self, tenant_a, branch_a, client_admin_a):
         category = client_admin_a.post("/api/inventory/categories/", {"name": "Mobiles"}).json()
-        brand = client_admin_a.post("/api/inventory/brands/", {"name": "Apple"}).json()
+        brand = client_admin_a.post(
+            "/api/inventory/brands/", {"name": "Apple", "category": category["id"]}
+        ).json()
         product = client_admin_a.post(
             "/api/inventory/products/",
-            {"name": "iPhone 15 Pro", "category": category["id"], "brand": brand["id"]},
+            {"name": "iPhone 15 Pro", "brand": brand["id"]},
         ).json()
         sku_res = client_admin_a.post(
             "/api/inventory/skus/",
@@ -97,10 +105,10 @@ class TestFullChainAPI:
 
     def test_cross_tenant_fk_rejected(self, tenant_a, tenant_b, client_admin_a):
         theirs_cat = Category.objects.create(tenant=tenant_b, name="Mobiles")
-        brand = Brand.objects.create(tenant=tenant_a, name="Apple")
+        theirs_brand = Brand.objects.create(tenant=tenant_b, name="Sneaky Brand", category=theirs_cat)
         res = client_admin_a.post(
             "/api/inventory/products/",
-            {"name": "Sneaky", "category": theirs_cat.id, "brand": brand.id},
+            {"name": "Sneaky", "brand": theirs_brand.id},
         )
         assert res.status_code == 400  # FK cannot cross tenants
 

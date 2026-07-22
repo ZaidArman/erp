@@ -3,8 +3,9 @@
 No view in this project ever filters by tenant manually — inherit this
 and isolation is guaranteed (PRD section 2.3, leak prevention).
 """
+from django.db import IntegrityError
 from rest_framework import viewsets
-from rest_framework.exceptions import PermissionDenied
+from rest_framework.exceptions import PermissionDenied, ValidationError
 
 from .audit import log_action
 
@@ -22,13 +23,22 @@ class TenantAwareViewSet(viewsets.ModelViewSet):
         return super().get_queryset().filter(tenant=self.get_tenant())
 
     def perform_create(self, serializer):
-        instance = serializer.save(tenant=self.get_tenant())
+        # tenant is injected here (not in the serializer), so unique_together
+        # constraints involving it can't be caught by DRF's validators up
+        # front — turn the resulting DB IntegrityError into a clean 400.
+        try:
+            instance = serializer.save(tenant=self.get_tenant())
+        except IntegrityError:
+            raise ValidationError({"name": "An item with this name already exists in your shop."})
         if self.audit:
             log_action(self.request, "create", instance, {"after": _snapshot(instance)})
 
     def perform_update(self, serializer):
         before = _snapshot(serializer.instance)
-        instance = serializer.save(tenant=self.get_tenant())
+        try:
+            instance = serializer.save(tenant=self.get_tenant())
+        except IntegrityError:
+            raise ValidationError({"name": "An item with this name already exists in your shop."})
         if self.audit:
             log_action(
                 self.request,

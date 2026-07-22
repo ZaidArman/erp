@@ -1,25 +1,36 @@
-import { useEffect, useState } from "react";
-import { api, errorText } from "../api";
+import { useEffect, useMemo, useState } from "react";
+import { api, errorText, errorTitle } from "../api";
+import Modal from "../components/Modal";
 
 export default function Products() {
   const [products, setProducts] = useState([]);
-  const [categories, setCategories] = useState([]);
   const [brands, setBrands] = useState([]);
+  const [categories, setCategories] = useState([]);
   const [skus, setSkus] = useState([]);
   const [selected, setSelected] = useState(null);
   const [error, setError] = useState("");
-  const [pForm, setPForm] = useState({ name: "", category: "", brand: "", description: "" });
-  const [sForm, setSForm] = useState({ variant_name: "", sell_price: "", color: "", storage: "", ram: "" });
+  const [pForm, setPForm] = useState({ name: "", brand: "", description: "" });
+  const [sForm, setSForm] = useState({ variant_name: "", sell_price: "" });
+  const [sAttrs, setSAttrs] = useState({});
 
   const loadProducts = () => api.get("/inventory/products/").then((res) => setProducts(res.data.results));
   useEffect(() => {
     loadProducts();
-    api.get("/inventory/categories/").then((res) => setCategories(res.data.results));
     api.get("/inventory/brands/").then((res) => setBrands(res.data.results));
+    api.get("/inventory/categories/").then((res) => setCategories(res.data.results));
   }, []);
+
+  const selectedBrand = brands.find((b) => String(b.id) === String(pForm.brand));
+
+  const selectedCategorySchema = useMemo(() => {
+    if (!selected) return [];
+    const cat = categories.find((c) => c.id === selected.category);
+    return cat?.attribute_schema || [];
+  }, [selected, categories]);
 
   const openProduct = (product) => {
     setSelected(product);
+    setSAttrs({});
     api.get(`/inventory/skus/?product=${product.id}`).then((res) => setSkus(res.data.results));
   };
 
@@ -28,7 +39,7 @@ export default function Products() {
     setError("");
     try {
       await api.post("/inventory/products/", pForm);
-      setPForm({ name: "", category: "", brand: "", description: "" });
+      setPForm({ name: "", brand: "", description: "" });
       loadProducts();
     } catch (err) { setError(errorText(err)); }
   };
@@ -37,9 +48,9 @@ export default function Products() {
     e.preventDefault();
     setError("");
     const attributes = {};
-    if (sForm.color) attributes.color = sForm.color;
-    if (sForm.storage) attributes.storage = sForm.storage;
-    if (sForm.ram) attributes.ram = sForm.ram;
+    selectedCategorySchema.forEach((f) => {
+      if (sAttrs[f.key]) attributes[f.key] = sAttrs[f.key];
+    });
     try {
       await api.post("/inventory/skus/", {
         product: selected.id,
@@ -47,7 +58,8 @@ export default function Products() {
         sell_price: sForm.sell_price,
         attributes,
       });
-      setSForm({ variant_name: "", sell_price: "", color: "", storage: "", ram: "" });
+      setSForm({ variant_name: "", sell_price: "" });
+      setSAttrs({});
       openProduct(selected);
       loadProducts();
     } catch (err) { setError(errorText(err)); }
@@ -56,25 +68,22 @@ export default function Products() {
   return (
     <>
       <h2 className="page">Products &amp; SKUs</h2>
-      {error && <div className="error">{error}</div>}
+      <Modal title={errorTitle(error)} message={error} onClose={() => setError("")} />
       <div className="card">
         <h3>New product</h3>
         <form className="row" onSubmit={createProduct}>
           <div className="field"><label>Name</label>
             <input value={pForm.name} onChange={(e) => setPForm({ ...pForm, name: e.target.value })} required /></div>
-          <div className="field"><label>Category</label>
-            <select value={pForm.category} onChange={(e) => setPForm({ ...pForm, category: e.target.value })} required>
-              <option value="">Select…</option>
-              {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select></div>
           <div className="field"><label>Brand</label>
             <select value={pForm.brand} onChange={(e) => setPForm({ ...pForm, brand: e.target.value })} required>
               <option value="">Select…</option>
               {brands.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
             </select></div>
+          <div className="field"><label>Category</label>
+            <input value={selectedBrand?.category_name || ""} placeholder="Follows brand" disabled /></div>
           <div className="field" style={{ alignSelf: "end", flex: 0 }}><button>Add</button></div>
         </form>
-        {categories.length === 0 && (
+        {brands.length === 0 && (
           <p style={{ fontSize: ".8rem", color: "#8a94a2" }}>Create categories and brands first.</p>
         )}
       </div>
@@ -97,7 +106,7 @@ export default function Products() {
 
       {selected && (
         <div className="card">
-          <h3>SKUs — {selected.name}</h3>
+          <h3>SKUs — {selected.name} <span style={{ color: "#8a94a2", fontWeight: 400 }}>({selected.category_name})</span></h3>
           <form className="row" onSubmit={createSku}>
             <div className="field"><label>Variant name</label>
               <input value={sForm.variant_name} placeholder="256GB Black"
@@ -105,21 +114,30 @@ export default function Products() {
             <div className="field"><label>Sell price</label>
               <input type="number" min="1" step="0.01" value={sForm.sell_price}
                 onChange={(e) => setSForm({ ...sForm, sell_price: e.target.value })} required /></div>
-            <div className="field"><label>Color</label>
-              <input value={sForm.color} onChange={(e) => setSForm({ ...sForm, color: e.target.value })} /></div>
-            <div className="field"><label>Storage</label>
-              <input value={sForm.storage} onChange={(e) => setSForm({ ...sForm, storage: e.target.value })} /></div>
-            <div className="field"><label>RAM</label>
-              <input value={sForm.ram} onChange={(e) => setSForm({ ...sForm, ram: e.target.value })} /></div>
+            {selectedCategorySchema.map((f) => (
+              <div className="field" key={f.key}><label>{f.label}</label>
+                <input
+                  type={f.type === "number" ? "number" : "text"}
+                  value={sAttrs[f.key] || ""}
+                  onChange={(e) => setSAttrs({ ...sAttrs, [f.key]: e.target.value })}
+                /></div>
+            ))}
             <div className="field" style={{ alignSelf: "end", flex: 0 }}><button>Add SKU</button></div>
           </form>
+          {selectedCategorySchema.length === 0 && (
+            <p style={{ fontSize: ".78rem", color: "#8a94a2" }}>
+              This category has no custom fields yet — add some on the Categories page.
+            </p>
+          )}
           <table>
             <thead><tr><th>Variant</th><th>Sell price</th><th>Attributes</th><th>Available units</th></tr></thead>
             <tbody>
               {skus.map((s) => (
                 <tr key={s.id}>
                   <td>{s.variant_name}</td><td>{s.sell_price}</td>
-                  <td style={{ fontSize: ".8rem", color: "#5c6673" }}>{JSON.stringify(s.attributes)}</td>
+                  <td style={{ fontSize: ".8rem", color: "#5c6673" }}>
+                    {Object.entries(s.attributes || {}).map(([k, v]) => `${k}: ${v}`).join(", ") || "—"}
+                  </td>
                   <td>{s.available_units}</td>
                 </tr>
               ))}

@@ -25,7 +25,7 @@ IS_SQLITE = "sqlite" in settings.DATABASES["default"]["ENGINE"]
 
 def build_catalog(tenant, branch, price=1000, cost=700, imeis=("IMEI-A", "IMEI-B")):
     category = Category.objects.create(tenant=tenant, name="Mobiles")
-    brand = Brand.objects.create(tenant=tenant, name="Apple")
+    brand = Brand.objects.create(tenant=tenant, name="Apple", category=category)
     product = Product.objects.create(
         tenant=tenant, category=category, brand=brand, name="iPhone 15 Pro"
     )

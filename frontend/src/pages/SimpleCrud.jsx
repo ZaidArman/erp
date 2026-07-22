@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
-import { api, errorText } from "../api";
+import { api, errorText, errorTitle } from "../api";
+import Modal from "../components/Modal";
 
 export default function SimpleCrud({ title, endpoint, extraField }) {
   const [items, setItems] = useState([]);
@@ -34,7 +35,7 @@ export default function SimpleCrud({ title, endpoint, extraField }) {
   return (
     <>
       <h2 className="page">{title}</h2>
-      {error && <div className="error">{error}</div>}
+      <Modal title={errorTitle(error)} message={error} onClose={() => setError("")} />
       <div className="card">
         <form className="row" onSubmit={create}>
           <div className="field"><label>Name</label>

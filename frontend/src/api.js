@@ -23,12 +23,21 @@ api.interceptors.response.use(
   }
 );
 
+export function errorTitle(message) {
+  return /already exists/i.test(message || "") ? "Already exists" : "Something went wrong";
+}
+
 export function errorText(error) {
   const data = error.response?.data;
   if (!data) return "Network error — is the backend running?";
   if (typeof data === "string") return data;
   if (data.detail) return String(data.detail);
-  return Object.entries(data)
+  const entries = Object.entries(data);
+  if (entries.length === 1) {
+    const [, value] = entries[0];
+    return Array.isArray(value) ? value.join(" ") : String(value);
+  }
+  return entries
     .map(([key, value]) => `${key}: ${Array.isArray(value) ? value.join(" ") : value}`)
     .join(" | ");
 }

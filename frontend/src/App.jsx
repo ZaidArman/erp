@@ -13,17 +13,21 @@ import {
   ShoppingCart,
   Tag,
   Tags,
+  TableProperties,
   TrendingUp,
   Truck,
   Users,
 } from "lucide-react";
 import { AuthProvider, useAuth } from "./AuthContext";
 import Branches from "./pages/Branches";
+import Brands from "./pages/Brands";
+import Categories from "./pages/Categories";
 import Dashboard from "./pages/Dashboard";
 import Employees from "./pages/Employees";
 import Login from "./pages/Login";
 import POS from "./pages/POS";
 import Products from "./pages/Products";
+import ProductsReport from "./pages/ProductsReport";
 import Reports from "./pages/Reports";
 import SalesHistory from "./pages/SalesHistory";
 import SimpleCrud from "./pages/SimpleCrud";
@@ -64,24 +68,27 @@ function Layout({ children }) {
           <NavLink to="/" end className="nav-link" title="Dashboard">
             <span className="nav-icon"><LayoutDashboard size={18} /></span><span className="nav-text">Dashboard</span>
           </NavLink>
+          <NavLink to="/products-list" className="nav-link" title="Products">
+            <span className="nav-icon"><TableProperties size={18} /></span><span className="nav-text">Products</span>
+          </NavLink>
 
           {canInventory && (
             <div className="nav-group">
               <div className="nav-group-title">Inventory</div>
-              <NavLink to="/stock" className="nav-link" title="Stock">
-                <span className="nav-icon"><Boxes size={18} /></span><span className="nav-text">Stock</span>
-              </NavLink>
-              <NavLink to="/stock/intake" className="nav-link" title="Stock intake">
-                <span className="nav-icon"><PackageSearch size={18} /></span><span className="nav-text">Stock intake</span>
-              </NavLink>
-              <NavLink to="/products" className="nav-link" title="Products & SKUs">
-                <span className="nav-icon"><Tag size={18} /></span><span className="nav-text">Products &amp; SKUs</span>
-              </NavLink>
               <NavLink to="/categories" className="nav-link" title="Categories">
                 <span className="nav-icon"><Tags size={18} /></span><span className="nav-text">Categories</span>
               </NavLink>
               <NavLink to="/brands" className="nav-link" title="Brands">
                 <span className="nav-icon"><Bookmark size={18} /></span><span className="nav-text">Brands</span>
+              </NavLink>
+              <NavLink to="/products" className="nav-link" title="Products & SKUs">
+                <span className="nav-icon"><Tag size={18} /></span><span className="nav-text">Products &amp; SKUs</span>
+              </NavLink>
+              <NavLink to="/stock" className="nav-link" title="Stock">
+                <span className="nav-icon"><Boxes size={18} /></span><span className="nav-text">Stock</span>
+              </NavLink>
+              <NavLink to="/stock/intake" className="nav-link" title="Stock intake">
+                <span className="nav-icon"><PackageSearch size={18} /></span><span className="nav-text">Stock intake</span>
               </NavLink>
               <NavLink to="/suppliers" className="nav-link" title="Suppliers">
                 <span className="nav-icon"><Truck size={18} /></span><span className="nav-text">Suppliers</span>
@@ -153,20 +160,15 @@ export default function App() {
               <Layout>
                 <Routes>
                   <Route index element={<Dashboard />} />
+                  <Route path="products-list" element={<ProductsReport />} />
                   <Route path="pos" element={<POS />} />
                   <Route path="sales" element={<SalesHistory />} />
                   <Route path="reports" element={<Reports />} />
                   <Route path="stock" element={<StockList />} />
                   <Route path="stock/intake" element={<StockIntake />} />
                   <Route path="products" element={<Products />} />
-                  <Route
-                    path="categories"
-                    element={<SimpleCrud title="Categories" endpoint="/inventory/categories/" />}
-                  />
-                  <Route
-                    path="brands"
-                    element={<SimpleCrud title="Brands" endpoint="/inventory/brands/" />}
-                  />
+                  <Route path="categories" element={<Categories />} />
+                  <Route path="brands" element={<Brands />} />
                   <Route
                     path="suppliers"
                     element={

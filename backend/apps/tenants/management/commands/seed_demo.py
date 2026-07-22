@@ -40,11 +40,32 @@ class Command(BaseCommand):
         self._user(beta, None, "admin@beta.com", "Admin@12345", User.ROLE_ADMIN, "Bilal (Owner)")
 
         if not Category.objects.filter(tenant=alpha).exists():
-            mobiles = Category.objects.create(tenant=alpha, name="Mobiles")
-            Category.objects.create(tenant=alpha, name="Laptops")
+            mobiles = Category.objects.create(
+                tenant=alpha, name="Mobiles",
+                attribute_schema=[
+                    {"key": "storage", "label": "Storage", "type": "text"},
+                    {"key": "ram", "label": "RAM", "type": "text"},
+                    {"key": "color", "label": "Color", "type": "text"},
+                ],
+            )
+            Category.objects.create(
+                tenant=alpha, name="Laptops",
+                attribute_schema=[
+                    {"key": "processor", "label": "Processor", "type": "text"},
+                    {"key": "ram", "label": "RAM", "type": "text"},
+                    {"key": "storage", "label": "Storage", "type": "text"},
+                ],
+            )
+            Category.objects.create(
+                tenant=alpha, name="Air Conditioners",
+                attribute_schema=[
+                    {"key": "tonnage", "label": "Tonnage", "type": "text"},
+                    {"key": "energy_rating", "label": "Energy rating", "type": "text"},
+                ],
+            )
             Category.objects.create(tenant=alpha, name="Accessories")
-            apple = Brand.objects.create(tenant=alpha, name="Apple")
-            Brand.objects.create(tenant=alpha, name="Samsung")
+            apple = Brand.objects.create(tenant=alpha, name="Apple", category=mobiles)
+            Brand.objects.create(tenant=alpha, name="Samsung", category=mobiles)
             supplier = Supplier.objects.create(
                 tenant=alpha, name="Karkhano Traders", contact="0300-1234567"
             )

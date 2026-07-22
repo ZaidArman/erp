@@ -1,4 +1,5 @@
 from django.db import IntegrityError, transaction
+from django.db.models import Q
 from rest_framework import serializers as drf_serializers
 from rest_framework import status
 from rest_framework.decorators import action
@@ -6,6 +7,7 @@ from rest_framework.response import Response
 
 from apps.accounts.permissions import HasEmployeePermission, IsAdminOrReadOnlyEmployee
 from apps.core.audit import log_action
+from apps.core.models import AuditLog
 from apps.core.viewsets import TenantAwareViewSet
 
 from .models import SKU, Brand, Category, Product, StockUnit, Supplier
@@ -13,6 +15,7 @@ from .serializers import (
     BrandSerializer,
     BulkIntakeSerializer,
     CategorySerializer,
+    ProductReportSerializer,
     ProductSerializer,
     SKUSerializer,
     StockUnitSerializer,
@@ -29,9 +32,16 @@ class CategoryViewSet(TenantAwareViewSet):
 
 
 class BrandViewSet(TenantAwareViewSet):
-    queryset = Brand.objects.all()
+    queryset = Brand.objects.select_related("category")
     serializer_class = BrandSerializer
     permission_classes = [MANAGE_INVENTORY]
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        category = self.request.query_params.get("category")
+        if category:
+            qs = qs.filter(category_id=category)
+        return qs
 
 
 class SupplierViewSet(TenantAwareViewSet):
@@ -86,7 +96,9 @@ class StockUnitViewSet(TenantAwareViewSet):
     Yes); writes require can_manage_inventory.
     """
 
-    queryset = StockUnit.objects.select_related("sku__product", "branch", "supplier")
+    queryset = StockUnit.objects.select_related(
+        "sku__product__brand", "branch", "supplier"
+    )
     serializer_class = StockUnitSerializer
 
     def get_permissions(self):
@@ -152,3 +164,51 @@ class StockUnitViewSet(TenantAwareViewSet):
         return Response(
             StockUnitSerializer(units, many=True).data, status=status.HTTP_201_CREATED
         )
+
+
+class ProductReportViewSet(TenantAwareViewSet):
+    """Read-only, flattened Category -> Brand -> Product -> SKU -> StockUnit
+    report for the Products page (full-hierarchy table + column search +
+    CSV export)."""
+
+    http_method_names = ["get"]
+    queryset = StockUnit.objects.select_related(
+        "sku__product__brand", "sku__product__category", "branch", "supplier"
+    )
+    serializer_class = ProductReportSerializer
+    permission_classes = [IsAdminOrReadOnlyEmployee]
+    audit = False
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        search = self.request.query_params.get("search")
+        if search:
+            qs = qs.filter(
+                Q(sku__product__name__icontains=search)
+                | Q(sku__product__category__name__icontains=search)
+                | Q(sku__product__brand__name__icontains=search)
+                | Q(imei_serial__icontains=search)
+            )
+        return qs
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        rows = list(self.filter_queryset(self.get_queryset())) if self.action in ("list",) else []
+        context["audit_by_object_id"] = self._audit_cache(rows)
+        return context
+
+    def _audit_cache(self, rows):
+        ids = [str(r.id) for r in rows]
+        if not ids:
+            return {}
+        logs = (
+            AuditLog.objects.filter(
+                tenant=self.get_tenant(), model_name="StockUnit", object_id__in=ids
+            )
+            .select_related("user")
+            .order_by("-timestamp")
+        )
+        cache = {}
+        for log in logs:
+            cache.setdefault(log.object_id, []).append(log)
+        return cache

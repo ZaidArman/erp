@@ -1,10 +1,23 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "../api";
+
+const COLUMNS = [
+  { key: "product_name", label: "Product" },
+  { key: "brand_name", label: "Brand" },
+  { key: "sku_label", label: "SKU" },
+  { key: "sell_price", label: "Price" },
+  { key: "imei_serial", label: "IMEI / serial" },
+  { key: "branch_name", label: "Branch" },
+  { key: "condition", label: "Condition" },
+  { key: "status", label: "Status" },
+];
 
 export default function StockList() {
   const [units, setUnits] = useState([]);
   const [count, setCount] = useState(0);
   const [filters, setFilters] = useState({ condition: "", is_sold: "false", imei: "" });
+  const [search, setSearch] = useState("");
+  const [colFilters, setColFilters] = useState({});
 
   const load = useCallback(() => {
     const params = new URLSearchParams();
@@ -18,6 +31,37 @@ export default function StockList() {
   }, [filters]);
 
   useEffect(load, [load]);
+
+  const rows = useMemo(() => {
+    return units.map((u) => ({
+      id: u.id,
+      product_name: u.product_name || "",
+      brand_name: u.brand_name || "",
+      sku_label: u.sku_label || "",
+      sell_price: u.sell_price ?? "",
+      imei_serial: u.imei_serial || "",
+      branch_name: u.branch_name || "",
+      condition: u.condition || "",
+      status: u.is_sold ? "sold" : "in stock",
+    }));
+  }, [units]);
+
+  const filteredRows = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return rows.filter((row) => {
+      if (q) {
+        const hit = COLUMNS.some((c) => String(row[c.key]).toLowerCase().includes(q));
+        if (!hit) return false;
+      }
+      return COLUMNS.every((c) => {
+        const val = colFilters[c.key];
+        if (!val) return true;
+        return String(row[c.key]).toLowerCase().includes(val.trim().toLowerCase());
+      });
+    });
+  }, [rows, search, colFilters]);
+
+  const setColFilter = (key, value) => setColFilters((f) => ({ ...f, [key]: value }));
 
   return (
     <>
@@ -42,25 +86,50 @@ export default function StockList() {
               <option value="true">Sold</option>
             </select></div>
         </div>
+        <div className="field" style={{ marginTop: ".6rem" }}>
+          <label>Global search</label>
+          <input
+            value={search}
+            placeholder="Search across product, brand, SKU, IMEI, branch…"
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
       </div>
       <div className="card">
         <table>
           <thead>
-            <tr><th>IMEI / serial</th><th>SKU</th><th>Branch</th><th>Condition</th><th>Purchase cost</th><th>Status</th></tr>
+            <tr>
+              {COLUMNS.map((c) => <th key={c.key}>{c.label}</th>)}
+            </tr>
+            <tr>
+              {COLUMNS.map((c) => (
+                <th key={c.key} style={{ paddingTop: 0, paddingBottom: ".5rem" }}>
+                  <input
+                    className="small"
+                    style={{ fontSize: ".78rem", padding: ".3rem .4rem" }}
+                    value={colFilters[c.key] || ""}
+                    placeholder="Filter…"
+                    onChange={(e) => setColFilter(c.key, e.target.value)}
+                  />
+                </th>
+              ))}
+            </tr>
           </thead>
           <tbody>
-            {units.map((u) => (
-              <tr key={u.id}>
-                <td style={{ fontFamily: "monospace" }}>{u.imei_serial}</td>
-                <td>{u.sku_label}</td>
-                <td>{u.branch_name}</td>
-                <td><span className="badge gray">{u.condition}</span></td>
-                <td>{u.purchase_cost}</td>
-                <td><span className={`badge ${u.is_sold ? "red" : "green"}`}>{u.is_sold ? "sold" : "in stock"}</span></td>
+            {filteredRows.map((r) => (
+              <tr key={r.id}>
+                <td>{r.product_name}</td>
+                <td>{r.brand_name}</td>
+                <td>{r.sku_label}</td>
+                <td>{r.sell_price}</td>
+                <td style={{ fontFamily: "monospace" }}>{r.imei_serial}</td>
+                <td>{r.branch_name}</td>
+                <td><span className="badge gray">{r.condition}</span></td>
+                <td><span className={`badge ${r.status === "sold" ? "red" : "green"}`}>{r.status}</span></td>
               </tr>
             ))}
-            {units.length === 0 && (
-              <tr><td colSpan={6} style={{ color: "#8a94a2" }}>No units match these filters.</td></tr>
+            {filteredRows.length === 0 && (
+              <tr><td colSpan={COLUMNS.length} style={{ color: "#8a94a2" }}>No units match these filters.</td></tr>
             )}
           </tbody>
         </table>

@@ -6,7 +6,13 @@ from apps.core.models import TenantAwareModel
 
 
 class Category(TenantAwareModel):
+    """`attribute_schema` defines the custom SKU-level fields this category's
+    products should capture (e.g. Mobiles: storage/RAM, AC: tonnage,
+    Fridge: capacity in liters) — [{"key": "tonnage", "label": "Tonnage",
+    "type": "text"}, ...]."""
+
     name = models.CharField(max_length=255)
+    attribute_schema = models.JSONField(default=list, blank=True)
 
     class Meta:
         unique_together = ("tenant", "name")
@@ -18,6 +24,7 @@ class Category(TenantAwareModel):
 
 
 class Brand(TenantAwareModel):
+    category = models.ForeignKey(Category, on_delete=models.PROTECT, related_name="brands")
     name = models.CharField(max_length=255)
 
     class Meta:
