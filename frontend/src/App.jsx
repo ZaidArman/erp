@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Navigate, NavLink, Route, Routes } from "react-router-dom";
 import { AuthProvider, useAuth } from "./AuthContext";
 import Branches from "./pages/Branches";
@@ -19,41 +20,119 @@ function Protected({ children }) {
   return children;
 }
 
+function NavGroup({ label, collapsed, children }) {
+  return (
+    <div className="nav-group">
+      {!collapsed && <div className="nav-group-label">{label}</div>}
+      {children}
+    </div>
+  );
+}
+
 function Layout({ children }) {
   const { user, logout, can } = useAuth();
+  const [collapsed, setCollapsed] = useState(false);
   const isAdmin = user.role === "admin";
   const canInventory = can("can_manage_inventory");
   return (
     <div className="layout">
-      <nav className="sidebar">
-        <div className="brand">Shop ERP</div>
-        <NavLink to="/">Dashboard</NavLink>
-        {can("can_use_pos") && <NavLink to="/pos">Point of sale</NavLink>}
-        <NavLink to="/sales">Sales history</NavLink>
-        <NavLink to="/stock">Stock</NavLink>
-        {canInventory && (
-          <>
-            <NavLink to="/stock/intake">Stock intake</NavLink>
-            <NavLink to="/products">Products &amp; SKUs</NavLink>
-            <NavLink to="/categories">Categories</NavLink>
-            <NavLink to="/brands">Brands</NavLink>
-            <NavLink to="/suppliers">Suppliers</NavLink>
-          </>
-        )}
-        {can("can_view_reports") && <NavLink to="/reports">Reports</NavLink>}
-        {isAdmin && (
-          <>
-            <NavLink to="/branches">Branches</NavLink>
-            <NavLink to="/employees">Employees</NavLink>
-          </>
-        )}
-        <div className="spacer" />
-        <div className="who">
-          {user.full_name || user.email}
-          <br />
-          role: {user.role}
+      <nav className={`sidebar${collapsed ? " collapsed" : ""}`}>
+        <div className="sidebar-top">
+          {!collapsed && <div className="brand">Shop ERP</div>}
+          <button
+            className="nav-toggle"
+            onClick={() => setCollapsed((c) => !c)}
+            title={collapsed ? "Expand menu" : "Collapse menu"}
+          >
+            {collapsed ? "»" : "«"}
+          </button>
         </div>
-        <button className="ghost" onClick={logout}>Log out</button>
+
+        <NavLink to="/" end className="nav-link">
+          <span className="nav-icon">⌂</span>
+          {!collapsed && <span>Dashboard</span>}
+        </NavLink>
+
+        {canInventory && (
+          <NavGroup label="Inventory" collapsed={collapsed}>
+            <NavLink to="/stock" className="nav-link">
+              <span className="nav-icon">▤</span>
+              {!collapsed && <span>Stock</span>}
+            </NavLink>
+            <NavLink to="/products" className="nav-link">
+              <span className="nav-icon">▤</span>
+              {!collapsed && <span>Products &amp; SKUs</span>}
+            </NavLink>
+            <NavLink to="/categories" className="nav-link">
+              <span className="nav-icon">▤</span>
+              {!collapsed && <span>Categories</span>}
+            </NavLink>
+            <NavLink to="/brands" className="nav-link">
+              <span className="nav-icon">▤</span>
+              {!collapsed && <span>Brands</span>}
+            </NavLink>
+          </NavGroup>
+        )}
+
+        <NavGroup label="POS" collapsed={collapsed}>
+          {can("can_use_pos") && (
+            <NavLink to="/pos" className="nav-link">
+              <span className="nav-icon">$</span>
+              {!collapsed && <span>Point of sale</span>}
+            </NavLink>
+          )}
+          <NavLink to="/sales" className="nav-link">
+            <span className="nav-icon">≡</span>
+            {!collapsed && <span>Sales history</span>}
+          </NavLink>
+        </NavGroup>
+
+        {canInventory && (
+          <NavGroup label="Supply management" collapsed={collapsed}>
+            <NavLink to="/stock/intake" className="nav-link">
+              <span className="nav-icon">↧</span>
+              {!collapsed && <span>Stock intake</span>}
+            </NavLink>
+            <NavLink to="/suppliers" className="nav-link">
+              <span className="nav-icon">⚑</span>
+              {!collapsed && <span>Suppliers</span>}
+            </NavLink>
+          </NavGroup>
+        )}
+
+        {can("can_view_reports") && (
+          <NavGroup label="Reports" collapsed={collapsed}>
+            <NavLink to="/reports" className="nav-link">
+              <span className="nav-icon">▦</span>
+              {!collapsed && <span>Reports</span>}
+            </NavLink>
+          </NavGroup>
+        )}
+
+        {isAdmin && (
+          <NavGroup label="User's management" collapsed={collapsed}>
+            <NavLink to="/employees" className="nav-link">
+              <span className="nav-icon">☺</span>
+              {!collapsed && <span>Employees</span>}
+            </NavLink>
+            <NavLink to="/branches" className="nav-link">
+              <span className="nav-icon">⌘</span>
+              {!collapsed && <span>Branches</span>}
+            </NavLink>
+          </NavGroup>
+        )}
+
+        <div className="spacer" />
+        {!collapsed && (
+          <div className="who">
+            {user.full_name || user.email}
+            <br />
+            role: {user.role}
+          </div>
+        )}
+        <button className="ghost" onClick={logout}>
+          {collapsed ? "⏻" : "Log out"}
+        </button>
       </nav>
       <main className="main">{children}</main>
     </div>
