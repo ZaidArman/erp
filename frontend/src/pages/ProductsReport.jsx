@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "../api";
 
+const PAGE_SIZE = 20;
+
 const COLUMNS = [
   { key: "product_id", label: "Product ID" },
   { key: "product_name", label: "Product" },
@@ -28,18 +30,22 @@ function csvEscape(value) {
 
 export default function ProductsReport() {
   const [rows, setRows] = useState([]);
-  const [count, setCount] = useState(0);
   const [search, setSearch] = useState("");
   const [colFilters, setColFilters] = useState({});
+  const [page, setPage] = useState(1);
 
-  const load = useCallback(() => {
-    api.get("/inventory/product-report/").then((res) => {
-      setRows(res.data.results);
-      setCount(res.data.count);
-    });
+  const load = useCallback(async () => {
+    let url = "/inventory/product-report/";
+    let all = [];
+    while (url) {
+      const res = await api.get(url);
+      all = all.concat(res.data.results);
+      url = res.data.next ? res.data.next.replace(api.defaults.baseURL, "") : null;
+    }
+    setRows(all);
   }, []);
 
-  useEffect(load, [load]);
+  useEffect(() => { load(); }, [load]);
 
   const displayRows = useMemo(() => {
     return rows.map((r) => ({
@@ -58,7 +64,10 @@ export default function ProductsReport() {
     }));
   }, [rows]);
 
-  const setColFilter = (key, value) => setColFilters((f) => ({ ...f, [key]: value }));
+  const setColFilter = (key, value) => {
+    setColFilters((f) => ({ ...f, [key]: value }));
+    setPage(1);
+  };
 
   const filteredRows = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -74,6 +83,12 @@ export default function ProductsReport() {
       });
     });
   }, [displayRows, search, colFilters]);
+
+  const pageCount = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE));
+  const safePage = Math.min(page, pageCount);
+  const pageRows = filteredRows.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+
+  const goToPage = (p) => setPage(Math.min(Math.max(1, p), pageCount));
 
   const exportCsv = () => {
     const header = COLUMNS.map((c) => c.label).join(",");
@@ -91,7 +106,7 @@ export default function ProductsReport() {
 
   return (
     <>
-      <h2 className="page">Products ({count})</h2>
+      <h2 className="page">Products ({filteredRows.length})</h2>
       <div className="card">
         <div className="row">
           <div className="field" style={{ flex: 2 }}>
@@ -99,7 +114,7 @@ export default function ProductsReport() {
             <input
               value={search}
               placeholder="Search across all columns…"
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => { setSearch(e.target.value); setPage(1); }}
             />
           </div>
           <div className="field" style={{ alignSelf: "end", flex: 0 }}>
@@ -107,7 +122,7 @@ export default function ProductsReport() {
           </div>
         </div>
       </div>
-      <div className="card">
+      <div className="card" style={{ padding: 0 }}>
         <div style={{ overflowX: "auto" }}>
           <table>
             <thead>
@@ -129,7 +144,7 @@ export default function ProductsReport() {
               </tr>
             </thead>
             <tbody>
-              {filteredRows.map((r) => (
+              {pageRows.map((r) => (
                 <tr key={r.id}>
                   <td>{r.product_id}</td>
                   <td>{r.product_name}</td>
@@ -144,11 +159,29 @@ export default function ProductsReport() {
                   <td>{r.updated_by_name}</td>
                 </tr>
               ))}
-              {filteredRows.length === 0 && (
+              {pageRows.length === 0 && (
                 <tr><td colSpan={COLUMNS.length} style={{ color: "#8a94a2" }}>No products match these filters.</td></tr>
               )}
             </tbody>
           </table>
+        </div>
+
+        <div className="pagination">
+          <button className="ghost small" onClick={() => goToPage(safePage - 1)} disabled={safePage <= 1}>
+            ← Prev
+          </button>
+          <input
+            className="slider"
+            type="range"
+            min={1}
+            max={pageCount}
+            value={safePage}
+            onChange={(e) => goToPage(Number(e.target.value))}
+          />
+          <button className="ghost small" onClick={() => goToPage(safePage + 1)} disabled={safePage >= pageCount}>
+            Next →
+          </button>
+          <span className="page-info">Page {safePage} / {pageCount}</span>
         </div>
       </div>
     </>

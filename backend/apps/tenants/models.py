@@ -20,6 +20,16 @@ class Branch(models.Model):
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
+    # These fields will be implemented
+    # branch_code # Unique code for the branch (e.g. BR001, BR002, etc.)
+    # email # email of the branch owner
+    # branch_phone_number # phone number of the manager manager / employeer
+    # branch_city # City address of the branch
+    # branch_province # province of the branch 
+    # created_by # Who created this branch into the app (EMployee or Admin / Inserted by)
+    # updated_by # Who updated this branch into the app (EMployee or Admin / updated by)
+    # deleted_at # When this branch was deleted (soft delete)
+    
     class Meta:
         unique_together = ("tenant", "name")
 

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Navigate, NavLink, Route, Routes } from "react-router-dom";
+import { Navigate, NavLink, Route, Routes, useLocation } from "react-router-dom";
 import {
   Bookmark,
   Boxes,
@@ -44,8 +44,10 @@ function Protected({ children }) {
 function Layout({ children }) {
   const { user, logout, can } = useAuth();
   const [collapsed, setCollapsed] = useState(false);
+  const location = useLocation();
   const isAdmin = user.role === "admin";
   const canInventory = can("can_manage_inventory");
+  const wide = location.pathname === "/products-list";
   return (
     <div className="layout">
       <nav className={`sidebar${collapsed ? " collapsed" : ""}`}>
@@ -143,7 +145,7 @@ function Layout({ children }) {
           </button>
         </div>
       </nav>
-      <main className="main">{children}</main>
+      <main className={`main${wide ? " main-wide" : ""}`}>{children}</main>
     </div>
   );
 }
