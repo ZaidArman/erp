@@ -17,6 +17,7 @@ class EmployeePermissionSerializer(serializers.ModelSerializer):
 class UserSerializer(serializers.ModelSerializer):
     permissions = EmployeePermissionSerializer(source="employee_permission", read_only=True)
     branch_name = serializers.CharField(source="branch.name", read_only=True)
+    tenant_name = serializers.CharField(source="tenant.name", read_only=True)
 
     class Meta:
         model = User
@@ -27,6 +28,7 @@ class UserSerializer(serializers.ModelSerializer):
             "role",
             "branch",
             "branch_name",
+            "tenant_name",
             "is_active",
             "permissions",
         ]

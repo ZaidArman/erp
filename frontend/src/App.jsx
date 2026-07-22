@@ -1,5 +1,22 @@
 import { useState } from "react";
 import { Navigate, NavLink, Route, Routes } from "react-router-dom";
+import {
+  Bookmark,
+  Boxes,
+  Building2,
+  ChevronsLeft,
+  ChevronsRight,
+  LayoutDashboard,
+  LogOut,
+  PackageSearch,
+  Receipt,
+  ShoppingCart,
+  Tag,
+  Tags,
+  TrendingUp,
+  Truck,
+  Users,
+} from "lucide-react";
 import { AuthProvider, useAuth } from "./AuthContext";
 import Branches from "./pages/Branches";
 import Dashboard from "./pages/Dashboard";
@@ -20,15 +37,6 @@ function Protected({ children }) {
   return children;
 }
 
-function NavGroup({ label, collapsed, children }) {
-  return (
-    <div className="nav-group">
-      {!collapsed && <div className="nav-group-label">{label}</div>}
-      {children}
-    </div>
-  );
-}
-
 function Layout({ children }) {
   const { user, logout, can } = useAuth();
   const [collapsed, setCollapsed] = useState(false);
@@ -38,101 +46,95 @@ function Layout({ children }) {
     <div className="layout">
       <nav className={`sidebar${collapsed ? " collapsed" : ""}`}>
         <div className="sidebar-top">
-          {!collapsed && <div className="brand">Shop ERP</div>}
           <button
-            className="nav-toggle"
-            onClick={() => setCollapsed((c) => !c)}
+            className="collapse-btn"
+            onClick={() => setCollapsed((v) => !v)}
             title={collapsed ? "Expand menu" : "Collapse menu"}
           >
-            {collapsed ? "»" : "«"}
+            {collapsed ? <ChevronsRight size={18} /> : <ChevronsLeft size={18} />}
           </button>
+          {!collapsed && (
+            <div className="brand" title={user.tenant_name || "Shop ERP"}>
+              {user.tenant_name || "Shop ERP"}
+            </div>
+          )}
         </div>
 
-        <NavLink to="/" end className="nav-link">
-          <span className="nav-icon">⌂</span>
-          {!collapsed && <span>Dashboard</span>}
-        </NavLink>
-
-        {canInventory && (
-          <NavGroup label="Inventory" collapsed={collapsed}>
-            <NavLink to="/stock" className="nav-link">
-              <span className="nav-icon">▤</span>
-              {!collapsed && <span>Stock</span>}
-            </NavLink>
-            <NavLink to="/products" className="nav-link">
-              <span className="nav-icon">▤</span>
-              {!collapsed && <span>Products &amp; SKUs</span>}
-            </NavLink>
-            <NavLink to="/categories" className="nav-link">
-              <span className="nav-icon">▤</span>
-              {!collapsed && <span>Categories</span>}
-            </NavLink>
-            <NavLink to="/brands" className="nav-link">
-              <span className="nav-icon">▤</span>
-              {!collapsed && <span>Brands</span>}
-            </NavLink>
-          </NavGroup>
-        )}
-
-        <NavGroup label="POS" collapsed={collapsed}>
-          {can("can_use_pos") && (
-            <NavLink to="/pos" className="nav-link">
-              <span className="nav-icon">$</span>
-              {!collapsed && <span>Point of sale</span>}
-            </NavLink>
-          )}
-          <NavLink to="/sales" className="nav-link">
-            <span className="nav-icon">≡</span>
-            {!collapsed && <span>Sales history</span>}
+        <div className="nav-scroll">
+          <NavLink to="/" end className="nav-link" title="Dashboard">
+            <span className="nav-icon"><LayoutDashboard size={18} /></span><span className="nav-text">Dashboard</span>
           </NavLink>
-        </NavGroup>
 
-        {canInventory && (
-          <NavGroup label="Supply management" collapsed={collapsed}>
-            <NavLink to="/stock/intake" className="nav-link">
-              <span className="nav-icon">↧</span>
-              {!collapsed && <span>Stock intake</span>}
-            </NavLink>
-            <NavLink to="/suppliers" className="nav-link">
-              <span className="nav-icon">⚑</span>
-              {!collapsed && <span>Suppliers</span>}
-            </NavLink>
-          </NavGroup>
-        )}
+          {canInventory && (
+            <div className="nav-group">
+              <div className="nav-group-title">Inventory</div>
+              <NavLink to="/stock" className="nav-link" title="Stock">
+                <span className="nav-icon"><Boxes size={18} /></span><span className="nav-text">Stock</span>
+              </NavLink>
+              <NavLink to="/stock/intake" className="nav-link" title="Stock intake">
+                <span className="nav-icon"><PackageSearch size={18} /></span><span className="nav-text">Stock intake</span>
+              </NavLink>
+              <NavLink to="/products" className="nav-link" title="Products & SKUs">
+                <span className="nav-icon"><Tag size={18} /></span><span className="nav-text">Products &amp; SKUs</span>
+              </NavLink>
+              <NavLink to="/categories" className="nav-link" title="Categories">
+                <span className="nav-icon"><Tags size={18} /></span><span className="nav-text">Categories</span>
+              </NavLink>
+              <NavLink to="/brands" className="nav-link" title="Brands">
+                <span className="nav-icon"><Bookmark size={18} /></span><span className="nav-text">Brands</span>
+              </NavLink>
+              <NavLink to="/suppliers" className="nav-link" title="Suppliers">
+                <span className="nav-icon"><Truck size={18} /></span><span className="nav-text">Suppliers</span>
+              </NavLink>
+            </div>
+          )}
 
-        {can("can_view_reports") && (
-          <NavGroup label="Reports" collapsed={collapsed}>
-            <NavLink to="/reports" className="nav-link">
-              <span className="nav-icon">▦</span>
-              {!collapsed && <span>Reports</span>}
+          <div className="nav-group">
+            <div className="nav-group-title">Sales</div>
+            {can("can_use_pos") && (
+              <NavLink to="/pos" className="nav-link" title="Point of sale">
+                <span className="nav-icon"><ShoppingCart size={18} /></span><span className="nav-text">Point of sale</span>
+              </NavLink>
+            )}
+            <NavLink to="/sales" className="nav-link" title="Sales history">
+              <span className="nav-icon"><Receipt size={18} /></span><span className="nav-text">Sales history</span>
             </NavLink>
-          </NavGroup>
-        )}
-
-        {isAdmin && (
-          <NavGroup label="User's management" collapsed={collapsed}>
-            <NavLink to="/employees" className="nav-link">
-              <span className="nav-icon">☺</span>
-              {!collapsed && <span>Employees</span>}
-            </NavLink>
-            <NavLink to="/branches" className="nav-link">
-              <span className="nav-icon">⌘</span>
-              {!collapsed && <span>Branches</span>}
-            </NavLink>
-          </NavGroup>
-        )}
-
-        <div className="spacer" />
-        {!collapsed && (
-          <div className="who">
-            {user.full_name || user.email}
-            <br />
-            role: {user.role}
           </div>
-        )}
-        <button className="ghost" onClick={logout}>
-          {collapsed ? "⏻" : "Log out"}
-        </button>
+
+          {can("can_view_reports") && (
+            <div className="nav-group">
+              <div className="nav-group-title">Reports</div>
+              <NavLink to="/reports" className="nav-link" title="Reports">
+                <span className="nav-icon"><TrendingUp size={18} /></span><span className="nav-text">Reports</span>
+              </NavLink>
+            </div>
+          )}
+
+          {isAdmin && (
+            <div className="nav-group">
+              <div className="nav-group-title">User management</div>
+              <NavLink to="/employees" className="nav-link" title="Employees">
+                <span className="nav-icon"><Users size={18} /></span><span className="nav-text">Employees</span>
+              </NavLink>
+              <NavLink to="/branches" className="nav-link" title="Branches">
+                <span className="nav-icon"><Building2 size={18} /></span><span className="nav-text">Branches</span>
+              </NavLink>
+            </div>
+          )}
+        </div>
+
+        <div className="sidebar-bottom">
+          {!collapsed && (
+            <div className="who">
+              {user.full_name || user.email}
+              <br />
+              role: {user.role}
+            </div>
+          )}
+          <button className="ghost" onClick={logout} title="Log out">
+            <span className="nav-icon"><LogOut size={18} /></span><span className="nav-text">Log out</span>
+          </button>
+        </div>
       </nav>
       <main className="main">{children}</main>
     </div>
