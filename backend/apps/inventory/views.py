@@ -32,6 +32,12 @@ class CategoryViewSet(TenantAwareViewSet):
     serializer_class = CategorySerializer
     permission_classes = [MANAGE_INVENTORY]
 
+    def get_queryset(self):
+        return super().get_queryset().annotate(
+            created_by_name=audit_name_subquery("Category", action_filter="create"),
+            updated_by_name=audit_name_subquery("Category"),
+        )
+
 
 class BrandViewSet(TenantAwareViewSet):
     queryset = Brand.objects.select_related("category")

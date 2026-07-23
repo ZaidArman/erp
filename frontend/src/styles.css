@@ -388,7 +388,7 @@ button.ghost { background: transparent; color: var(--brand-600); border-color: v
 button.ghost:hover { background: var(--surface-hover); border-color: var(--brand-400); }
 button.danger { background: var(--danger-600); }
 button.danger:hover { background: var(--danger-700); }
-button.small { padding: .32rem .65rem; font-size: .78rem; }
+button.small { padding: .38rem .75rem; font-size: .83rem; }
 
 .icon-btn {
   background: transparent; color: var(--brand-600); border: 1px solid var(--border); border-radius: var(--radius-md);
@@ -430,19 +430,37 @@ button.small { padding: .32rem .65rem; font-size: .78rem; }
 }
 @keyframes overlay-in { from { opacity: 0; } to { opacity: 1; } }
 .modal-box {
-  background: var(--surface); border-radius: var(--radius-xl); padding: 1.7rem 1.9rem; width: 340px;
+  background: var(--surface); border-radius: var(--radius-xl); padding: 2rem 2.1rem; width: 380px;
   text-align: center; box-shadow: var(--shadow-xl); border: 1px solid var(--border);
   animation: modal-in var(--t-base) var(--ease);
 }
 @keyframes modal-in { from { opacity: 0; transform: translateY(8px) scale(.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
-.modal-box h3 { font-size: 1.08rem; font-weight: 700; color: var(--text); margin-bottom: .6rem; }
-.modal-box p { font-size: .9rem; color: var(--text-secondary); margin-bottom: 1.3rem; line-height: 1.5; }
-.modal-box button { padding: .55rem 1.8rem; }
+.modal-box h3 { font-size: 1.3rem; font-weight: 800; color: var(--text); margin-bottom: .7rem; letter-spacing: -.015em; }
+.modal-box p { font-size: 1rem; color: var(--text-secondary); margin-bottom: 1.5rem; line-height: 1.55; }
+.modal-box button { padding: .65rem 2rem; font-size: .95rem; }
 
-.modal-box-form { width: 460px; max-width: 92vw; max-height: 85vh; overflow-y: auto; text-align: left; }
-.modal-box-form h3 { text-align: center; }
-.modal-form-actions { display: flex; justify-content: flex-end; gap: .6rem; margin-top: .5rem; }
-.modal-form-actions button { padding: .55rem 1.25rem; }
+.modal-box-form {
+  width: 560px; max-width: 94vw; max-height: 88vh; overflow-y: auto; text-align: left;
+  padding: 1.9rem 2.1rem;
+}
+.modal-box-form h3 {
+  text-align: left; font-size: 1.25rem; padding-bottom: .9rem; margin-bottom: 1.2rem;
+  border-bottom: 1px solid var(--border);
+}
+.modal-box-form label { font-size: .88rem; font-weight: 600; }
+.modal-box-form input, .modal-box-form select, .modal-box-form textarea {
+  font-size: 1rem; padding: .68rem .85rem;
+}
+.modal-box-form .field { margin-bottom: 1.1rem; }
+.modal-box-form > form > label {
+  font-size: .95rem; font-weight: 700; color: var(--text); display: block; margin-bottom: .3rem;
+}
+.modal-box-form p { font-size: .85rem; }
+.modal-form-actions {
+  display: flex; justify-content: flex-end; gap: .7rem; margin-top: 1.2rem;
+  padding-top: 1.1rem; border-top: 1px solid var(--border);
+}
+.modal-form-actions button { padding: .65rem 1.5rem; font-size: .92rem; }
 
 /* ---------- Receipt / print ---------- */
 .receipt { background: #fff; width: 300px; padding: 14px 16px; font-family: "Courier New", monospace; font-size: 12px; color: #000; border-radius: var(--radius-md); box-shadow: var(--shadow-sm); }

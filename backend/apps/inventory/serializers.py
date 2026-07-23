@@ -8,9 +8,20 @@ from .models import SKU, Brand, Category, Product, StockUnit, StockWarranty, Sup
 
 
 class CategorySerializer(serializers.ModelSerializer):
+    """created_by_name / updated_by_name are annotated onto the queryset by
+    CategoryViewSet (AuditLog subqueries) — Category doesn't store who did
+    what itself, consistent with Brand/ProductReport."""
+
+    created_by_name = serializers.CharField(read_only=True, allow_null=True, required=False)
+    updated_by_name = serializers.CharField(read_only=True, allow_null=True, required=False)
+
     class Meta:
         model = Category
-        fields = ["id", "name", "attribute_schema", "description", "is_active"]
+        fields = [
+            "id", "name", "attribute_schema", "description", "is_active",
+            "created_at", "updated_at", "created_by_name", "updated_by_name",
+        ]
+        read_only_fields = ["created_at", "updated_at"]
 
 
 class BrandSerializer(serializers.ModelSerializer):
