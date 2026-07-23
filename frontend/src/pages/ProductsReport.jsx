@@ -28,85 +28,88 @@ function csvEscape(value) {
   return s;
 }
 
+function toDisplayRow(r) {
+  return {
+    id: r.id,
+    product_id: r.product_id ?? "",
+    product_name: r.product_name || "",
+    category_name: r.category_name || "",
+    brand_name: r.brand_name || "",
+    imei_serial: r.imei_serial || "",
+    sell_price: r.sell_price ?? "",
+    purchase_cost: r.purchase_cost ?? "",
+    created_at: formatDate(r.created_at),
+    updated_at: formatDate(r.updated_at),
+    created_by_name: r.created_by_name || "",
+    updated_by_name: r.updated_by_name || "",
+  };
+}
+
 export default function ProductsReport() {
   const [rows, setRows] = useState([]);
+  const [count, setCount] = useState(0);
+  const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
   const [colFilters, setColFilters] = useState({});
-  const [page, setPage] = useState(1);
+  const [exporting, setExporting] = useState(false);
 
-  const load = useCallback(async () => {
-    let url = "/inventory/product-report/";
-    let all = [];
-    while (url) {
-      const res = await api.get(url);
-      all = all.concat(res.data.results);
-      url = res.data.next ? res.data.next.replace(api.defaults.baseURL, "") : null;
-    }
-    setRows(all);
-  }, []);
+  const queryParams = useMemo(() => {
+    const params = new URLSearchParams();
+    params.set("page", String(page));
+    params.set("page_size", String(PAGE_SIZE));
+    if (search.trim()) params.set("search", search.trim());
+    Object.entries(colFilters).forEach(([key, value]) => {
+      if (value && value.trim()) params.set(key, value.trim());
+    });
+    return params;
+  }, [page, search, colFilters]);
 
-  useEffect(() => { load(); }, [load]);
+  const load = useCallback(() => {
+    api.get(`/inventory/product-report/?${queryParams}`).then((res) => {
+      setRows(res.data.results.map(toDisplayRow));
+      setCount(res.data.count);
+    });
+  }, [queryParams]);
 
-  const displayRows = useMemo(() => {
-    return rows.map((r) => ({
-      id: r.id,
-      product_id: r.product_id ?? "",
-      product_name: r.product_name || "",
-      category_name: r.category_name || "",
-      brand_name: r.brand_name || "",
-      imei_serial: r.imei_serial || "",
-      sell_price: r.sell_price ?? "",
-      purchase_cost: r.purchase_cost ?? "",
-      created_at: formatDate(r.created_at),
-      updated_at: formatDate(r.updated_at),
-      created_by_name: r.created_by_name || "",
-      updated_by_name: r.updated_by_name || "",
-    }));
-  }, [rows]);
+  useEffect(load, [load]);
 
   const setColFilter = (key, value) => {
     setColFilters((f) => ({ ...f, [key]: value }));
     setPage(1);
   };
 
-  const filteredRows = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return displayRows.filter((row) => {
-      if (q) {
-        const hit = COLUMNS.some((c) => String(row[c.key]).toLowerCase().includes(q));
-        if (!hit) return false;
-      }
-      return COLUMNS.every((c) => {
-        const val = colFilters[c.key];
-        if (!val) return true;
-        return String(row[c.key]).toLowerCase().includes(val.trim().toLowerCase());
-      });
-    });
-  }, [displayRows, search, colFilters]);
-
-  const pageCount = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE));
-  const safePage = Math.min(page, pageCount);
-  const pageRows = filteredRows.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
-
+  const pageCount = Math.max(1, Math.ceil(count / PAGE_SIZE));
   const goToPage = (p) => setPage(Math.min(Math.max(1, p), pageCount));
 
-  const exportCsv = () => {
-    const header = COLUMNS.map((c) => c.label).join(",");
-    const body = filteredRows
-      .map((row) => COLUMNS.map((c) => csvEscape(row[c.key])).join(","))
-      .join("\n");
-    const blob = new Blob([header + "\n" + body], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `products-${new Date().toISOString().slice(0, 10)}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+  const exportCsv = async () => {
+    setExporting(true);
+    try {
+      const filterParams = new URLSearchParams(queryParams);
+      filterParams.set("page_size", "200");
+      filterParams.delete("page");
+      let url = `/inventory/product-report/?${filterParams}`;
+      let all = [];
+      while (url) {
+        const res = await api.get(url);
+        all = all.concat(res.data.results.map(toDisplayRow));
+        url = res.data.next ? res.data.next.replace(api.defaults.baseURL, "") : null;
+      }
+      const header = COLUMNS.map((c) => c.label).join(",");
+      const body = all.map((row) => COLUMNS.map((c) => csvEscape(row[c.key])).join(",")).join("\n");
+      const blob = new Blob([header + "\n" + body], { type: "text/csv;charset=utf-8;" });
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = `products-${new Date().toISOString().slice(0, 10)}.csv`;
+      link.click();
+      URL.revokeObjectURL(link.href);
+    } finally {
+      setExporting(false);
+    }
   };
 
   return (
     <>
-      <h2 className="page">Products ({filteredRows.length})</h2>
+      <h2 className="page">Products ({count})</h2>
       <div className="card">
         <div className="row">
           <div className="field" style={{ flex: 2 }}>
@@ -118,7 +121,9 @@ export default function ProductsReport() {
             />
           </div>
           <div className="field" style={{ alignSelf: "end", flex: 0 }}>
-            <button className="ghost" onClick={exportCsv}>Export CSV</button>
+            <button className="ghost" onClick={exportCsv} disabled={exporting}>
+              {exporting ? "Exporting…" : "Export CSV"}
+            </button>
           </div>
         </div>
       </div>
@@ -144,7 +149,7 @@ export default function ProductsReport() {
               </tr>
             </thead>
             <tbody>
-              {pageRows.map((r) => (
+              {rows.map((r) => (
                 <tr key={r.id}>
                   <td>{r.product_id}</td>
                   <td>{r.product_name}</td>
@@ -159,7 +164,7 @@ export default function ProductsReport() {
                   <td>{r.updated_by_name}</td>
                 </tr>
               ))}
-              {pageRows.length === 0 && (
+              {rows.length === 0 && (
                 <tr><td colSpan={COLUMNS.length} style={{ color: "#8a94a2" }}>No products match these filters.</td></tr>
               )}
             </tbody>
@@ -167,7 +172,7 @@ export default function ProductsReport() {
         </div>
 
         <div className="pagination">
-          <button className="ghost small" onClick={() => goToPage(safePage - 1)} disabled={safePage <= 1}>
+          <button className="ghost small" onClick={() => goToPage(page - 1)} disabled={page <= 1}>
             ← Prev
           </button>
           <input
@@ -175,13 +180,13 @@ export default function ProductsReport() {
             type="range"
             min={1}
             max={pageCount}
-            value={safePage}
+            value={page}
             onChange={(e) => goToPage(Number(e.target.value))}
           />
-          <button className="ghost small" onClick={() => goToPage(safePage + 1)} disabled={safePage >= pageCount}>
+          <button className="ghost small" onClick={() => goToPage(page + 1)} disabled={page >= pageCount}>
             Next →
           </button>
-          <span className="page-info">Page {safePage} / {pageCount}</span>
+          <span className="page-info">Page {page} / {pageCount}</span>
         </div>
       </div>
     </>

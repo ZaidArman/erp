@@ -1,8 +1,10 @@
 from django.db import IntegrityError, transaction
-from django.db.models import Q
+from django.db.models import CharField, OuterRef, Q, Subquery, Value
+from django.db.models.functions import Cast, Coalesce, NullIf
 from rest_framework import serializers as drf_serializers
 from rest_framework import status
 from rest_framework.decorators import action
+from rest_framework.pagination import PageNumberPagination
 from rest_framework.response import Response
 
 from apps.accounts.permissions import HasEmployeePermission, IsAdminOrReadOnlyEmployee
@@ -166,10 +168,18 @@ class StockUnitViewSet(TenantAwareViewSet):
         )
 
 
+class ProductReportPagination(PageNumberPagination):
+    page_size = 20
+    page_size_query_param = "page_size"
+    max_page_size = 200
+
+
 class ProductReportViewSet(TenantAwareViewSet):
     """Read-only, flattened Category -> Brand -> Product -> SKU -> StockUnit
     report for the Products page (full-hierarchy table + column search +
-    CSV export)."""
+    CSV export). Pagination, global search, and per-column filtering all
+    happen in the database — the frontend only ever holds one page at a
+    time (PAGE_SIZE = 20)."""
 
     http_method_names = ["get"]
     queryset = StockUnit.objects.select_related(
@@ -177,38 +187,74 @@ class ProductReportViewSet(TenantAwareViewSet):
     )
     serializer_class = ProductReportSerializer
     permission_classes = [IsAdminOrReadOnlyEmployee]
+    pagination_class = ProductReportPagination
     audit = False
 
+    # column key (as used by the frontend) -> ORM lookup path for icontains
+    TEXT_COLUMN_LOOKUPS = {
+        "product_name": "sku__product__name",
+        "category_name": "sku__product__category__name",
+        "brand_name": "sku__product__brand__name",
+        "imei_serial": "imei_serial",
+        "branch_name": "branch__name",
+        "condition": "condition",
+    }
+
+    def _audit_name_subquery(self, action_filter=None):
+        """Latest AuditLog user (display name) for this StockUnit row,
+        optionally restricted to a specific action (e.g. 'create')."""
+        logs = AuditLog.objects.filter(
+            tenant_id=OuterRef("tenant_id"),
+            model_name="StockUnit",
+            object_id=Cast(OuterRef("pk"), output_field=CharField()),
+        )
+        if action_filter:
+            logs = logs.filter(action=action_filter)
+        logs = logs.order_by("-timestamp").annotate(
+            display_name=Coalesce(
+                NullIf("user__full_name", Value("")), "user__email", output_field=CharField()
+            )
+        )
+        return Subquery(logs.values("display_name")[:1], output_field=CharField())
+
     def get_queryset(self):
-        qs = super().get_queryset()
-        search = self.request.query_params.get("search")
+        qs = super().get_queryset().annotate(
+            created_by_name=self._audit_name_subquery(action_filter="create"),
+            updated_by_name=self._audit_name_subquery(),
+        )
+        params = self.request.query_params
+
+        search = params.get("search")
         if search:
             qs = qs.filter(
                 Q(sku__product__name__icontains=search)
                 | Q(sku__product__category__name__icontains=search)
                 | Q(sku__product__brand__name__icontains=search)
                 | Q(imei_serial__icontains=search)
+                | Q(branch__name__icontains=search)
+                | Q(created_by_name__icontains=search)
+                | Q(updated_by_name__icontains=search)
             )
+
+        for column, lookup in self.TEXT_COLUMN_LOOKUPS.items():
+            value = params.get(column)
+            if value:
+                qs = qs.filter(**{f"{lookup}__icontains": value})
+
+        for column in ("created_by_name", "updated_by_name"):
+            value = params.get(column)
+            if value:
+                qs = qs.filter(**{f"{column}__icontains": value})
+
+        product_id = params.get("product_id")
+        if product_id:
+            qs = qs.filter(sku__product_id=product_id)
+
+        for column, field in (("sell_price", "sku__sell_price"), ("purchase_cost", "purchase_cost")):
+            value = params.get(column)
+            if value:
+                qs = qs.annotate(**{f"{column}_text": Cast(field, output_field=CharField())}).filter(
+                    **{f"{column}_text__icontains": value}
+                )
+
         return qs
-
-    def get_serializer_context(self):
-        context = super().get_serializer_context()
-        rows = list(self.filter_queryset(self.get_queryset())) if self.action in ("list",) else []
-        context["audit_by_object_id"] = self._audit_cache(rows)
-        return context
-
-    def _audit_cache(self, rows):
-        ids = [str(r.id) for r in rows]
-        if not ids:
-            return {}
-        logs = (
-            AuditLog.objects.filter(
-                tenant=self.get_tenant(), model_name="StockUnit", object_id__in=ids
-            )
-            .select_related("user")
-            .order_by("-timestamp")
-        )
-        cache = {}
-        for log in logs:
-            cache.setdefault(log.object_id, []).append(log)
-        return cache

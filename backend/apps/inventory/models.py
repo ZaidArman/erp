@@ -14,12 +14,12 @@ class Category(TenantAwareModel):
     name = models.CharField(max_length=255)
     attribute_schema = models.JSONField(default=list, blank=True)
     # These fields will be added
-    description # Category detail (e.g. Electronics, Home Appliances, etc.)
-    is_active
-    created_by # Who created this into the app (EMployee or Admin / Inserted by)
-    updated_by # Who updated this into the app (EMployee or Admin / updated by)
-    deleted_at # When this category was deleted (soft delete)
-    deleted_by # Who deleted this category (soft delete)
+    # description # Category detail (e.g. Electronics, Home Appliances, etc.)
+    # is_active
+    # created_by # Who created this into the app (EMployee or Admin / Inserted by)
+    # updated_by # Who updated this into the app (EMployee or Admin / updated by)
+    # deleted_at # When this category was deleted (soft delete)
+    # deleted_by # Who deleted this category (soft delete)
 
 
     class Meta:

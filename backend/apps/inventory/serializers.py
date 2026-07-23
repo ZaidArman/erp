@@ -106,12 +106,17 @@ class StockUnitSerializer(serializers.ModelSerializer):
 class ProductReportSerializer(StockUnitSerializer):
     """One row per physical stock unit, joined all the way up the hierarchy
     (Category -> Brand -> Product -> SKU), plus who created/last touched the
-    row — derived from AuditLog since StockUnit itself doesn't store that."""
+    row — derived from AuditLog since StockUnit itself doesn't store that.
+
+    created_by_name / updated_by_name are annotated onto the queryset by
+    ProductReportViewSet (subqueries against AuditLog), so pagination and
+    per-column filtering can happen entirely in the database rather than
+    requiring every row to be loaded into Python first."""
 
     product_id = serializers.IntegerField(source="sku.product.id", read_only=True)
     category_name = serializers.CharField(source="sku.product.category.name", read_only=True)
-    created_by_name = serializers.SerializerMethodField()
-    updated_by_name = serializers.SerializerMethodField()
+    created_by_name = serializers.CharField(read_only=True, allow_null=True)
+    updated_by_name = serializers.CharField(read_only=True, allow_null=True)
 
     class Meta(StockUnitSerializer.Meta):
         fields = StockUnitSerializer.Meta.fields + [
@@ -119,27 +124,6 @@ class ProductReportSerializer(StockUnitSerializer):
             "created_at", "updated_at",
             "created_by_name", "updated_by_name",
         ]
-
-    def _audit_logs(self, obj):
-        # Populated once per request by the viewset (see ProductReportViewSet)
-        # to avoid one AuditLog query per row.
-        cache = self.context.get("audit_by_object_id")
-        if cache is None:
-            return []
-        return cache.get(str(obj.id), [])
-
-    def get_created_by_name(self, obj):
-        logs = [l for l in self._audit_logs(obj) if l.action == "create"]
-        return logs[0].user.full_name or logs[0].user.email if logs and logs[0].user else None
-
-    def get_updated_by_name(self, obj):
-        logs = self._audit_logs(obj)
-        return logs[0].user.full_name or logs[0].user.email if logs and logs[0].user else None
-
-    def validate_purchase_cost(self, value):
-        if value <= 0:
-            raise serializers.ValidationError("Purchase cost must be positive.")
-        return value
 
 
 class BulkIntakeSerializer(serializers.Serializer):
