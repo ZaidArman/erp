@@ -3,6 +3,7 @@ import { Navigate, NavLink, Route, Routes } from "react-router-dom";
 import {
   Boxes,
   Building2,
+  ChevronRight,
   ChevronsLeft,
   ChevronsRight,
   LayoutDashboard,
@@ -18,6 +19,8 @@ import {
   Users,
 } from "lucide-react";
 import { AuthProvider, useAuth } from "./AuthContext";
+import Logo from "./components/Logo";
+import TopBar from "./components/TopBar";
 import Branches from "./pages/Branches";
 import Brands from "./pages/Brands";
 import Categories from "./pages/Categories";
@@ -40,6 +43,31 @@ function Protected({ children }) {
   return children;
 }
 
+function initials(user) {
+  const source = user.full_name || user.email || "?";
+  return source
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((s) => s[0]?.toUpperCase())
+    .join("") || "?";
+}
+
+function NavGroup({ title, collapsed, defaultOpen = true, children }) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div className="nav-group">
+      <button className="nav-group-header" onClick={() => setOpen((v) => !v)}>
+        {title}
+        <ChevronRight size={12} className={`chevron ${open ? "open" : ""}`} />
+      </button>
+      <div className={`nav-group-body ${open || collapsed ? "open" : "closed"}`}>
+        <div>{children}</div>
+      </div>
+    </div>
+  );
+}
+
 function Layout({ children }) {
   const { user, logout, can } = useAuth();
   const [collapsed, setCollapsed] = useState(false);
@@ -49,97 +77,92 @@ function Layout({ children }) {
     <div className="layout">
       <nav className={`sidebar${collapsed ? " collapsed" : ""}`}>
         <div className="sidebar-top">
+          <Logo workspace={user.tenant_name} collapsed={collapsed} />
           <button
             className="collapse-btn"
             onClick={() => setCollapsed((v) => !v)}
             title={collapsed ? "Expand menu" : "Collapse menu"}
           >
-            {collapsed ? <ChevronsRight size={18} /> : <ChevronsLeft size={18} />}
+            {collapsed ? <ChevronsRight size={16} /> : <ChevronsLeft size={16} />}
           </button>
-          {!collapsed && (
-            <div className="brand" title={user.tenant_name || "Shop ERP"}>
-              {user.tenant_name || "Shop ERP"}
-            </div>
-          )}
         </div>
 
         <div className="nav-scroll">
           <NavLink to="/" end className="nav-link" title="Dashboard">
-            <span className="nav-icon"><LayoutDashboard size={18} /></span><span className="nav-text">Dashboard</span>
+            <span className="nav-icon"><LayoutDashboard size={17} /></span><span className="nav-text">Dashboard</span>
           </NavLink>
           <NavLink to="/products-list" className="nav-link" title="Products">
-            <span className="nav-icon"><TableProperties size={18} /></span><span className="nav-text">Products</span>
+            <span className="nav-icon"><TableProperties size={17} /></span><span className="nav-text">Products</span>
           </NavLink>
 
           {canInventory && (
-            <div className="nav-group">
-              <div className="nav-group-title">Inventory</div>
+            <NavGroup title="Inventory" collapsed={collapsed}>
               <NavLink to="/categories" className="nav-link" title="Categories">
-                <span className="nav-icon"><Tags size={18} /></span><span className="nav-text">Categories</span>
+                <span className="nav-icon"><Tags size={17} /></span><span className="nav-text">Categories</span>
               </NavLink>
               <NavLink to="/products" className="nav-link" title="Products & SKUs">
-                <span className="nav-icon"><Tag size={18} /></span><span className="nav-text">Products &amp; SKUs</span>
+                <span className="nav-icon"><Tag size={17} /></span><span className="nav-text">Products &amp; SKUs</span>
               </NavLink>
               <NavLink to="/stock" className="nav-link" title="Stock">
-                <span className="nav-icon"><Boxes size={18} /></span><span className="nav-text">Stock</span>
+                <span className="nav-icon"><Boxes size={17} /></span><span className="nav-text">Stock</span>
               </NavLink>
               <NavLink to="/stock/intake" className="nav-link" title="Stock intake">
-                <span className="nav-icon"><PackageSearch size={18} /></span><span className="nav-text">Stock intake</span>
+                <span className="nav-icon"><PackageSearch size={17} /></span><span className="nav-text">Stock intake</span>
               </NavLink>
               <NavLink to="/suppliers" className="nav-link" title="Suppliers">
-                <span className="nav-icon"><Truck size={18} /></span><span className="nav-text">Suppliers</span>
+                <span className="nav-icon"><Truck size={17} /></span><span className="nav-text">Suppliers</span>
               </NavLink>
-            </div>
+            </NavGroup>
           )}
 
-          <div className="nav-group">
-            <div className="nav-group-title">Sales</div>
+          <NavGroup title="Sales" collapsed={collapsed}>
             {can("can_use_pos") && (
               <NavLink to="/pos" className="nav-link" title="Point of sale">
-                <span className="nav-icon"><ShoppingCart size={18} /></span><span className="nav-text">Point of sale</span>
+                <span className="nav-icon"><ShoppingCart size={17} /></span><span className="nav-text">Point of sale</span>
               </NavLink>
             )}
             <NavLink to="/sales" className="nav-link" title="Sales history">
-              <span className="nav-icon"><Receipt size={18} /></span><span className="nav-text">Sales history</span>
+              <span className="nav-icon"><Receipt size={17} /></span><span className="nav-text">Sales history</span>
             </NavLink>
-          </div>
+          </NavGroup>
 
           {can("can_view_reports") && (
-            <div className="nav-group">
-              <div className="nav-group-title">Reports</div>
+            <NavGroup title="Reports" collapsed={collapsed}>
               <NavLink to="/reports" className="nav-link" title="Reports">
-                <span className="nav-icon"><TrendingUp size={18} /></span><span className="nav-text">Reports</span>
+                <span className="nav-icon"><TrendingUp size={17} /></span><span className="nav-text">Reports</span>
               </NavLink>
-            </div>
+            </NavGroup>
           )}
 
           {isAdmin && (
-            <div className="nav-group">
-              <div className="nav-group-title">User management</div>
+            <NavGroup title="User management" collapsed={collapsed} defaultOpen={false}>
               <NavLink to="/employees" className="nav-link" title="Employees">
-                <span className="nav-icon"><Users size={18} /></span><span className="nav-text">Employees</span>
+                <span className="nav-icon"><Users size={17} /></span><span className="nav-text">Employees</span>
               </NavLink>
               <NavLink to="/branches" className="nav-link" title="Branches">
-                <span className="nav-icon"><Building2 size={18} /></span><span className="nav-text">Branches</span>
+                <span className="nav-icon"><Building2 size={17} /></span><span className="nav-text">Branches</span>
               </NavLink>
-            </div>
+            </NavGroup>
           )}
         </div>
 
         <div className="sidebar-bottom">
-          {!collapsed && (
-            <div className="who">
-              {user.full_name || user.email}
-              <br />
-              role: {user.role}
+          <div className="profile-card" title={user.full_name || user.email}>
+            <span className="profile-avatar">{initials(user)}</span>
+            <div className="profile-meta">
+              <div className="profile-name">{user.full_name || user.email}</div>
+              <div className="profile-role">{user.role}</div>
             </div>
-          )}
-          <button className="ghost" onClick={logout} title="Log out">
-            <span className="nav-icon"><LogOut size={18} /></span><span className="nav-text">Log out</span>
+          </div>
+          <button className="logout-btn" onClick={logout} title="Log out">
+            <LogOut size={15} /><span className="nav-text">Log out</span>
           </button>
         </div>
       </nav>
-      <main className="main">{children}</main>
+      <div className="app-main">
+        <TopBar />
+        <main className="main">{children}</main>
+      </div>
     </div>
   );
 }
