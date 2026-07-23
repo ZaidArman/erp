@@ -1,38 +1,131 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Pencil, Trash2 } from "lucide-react";
 import { api, errorText, errorTitle } from "../api";
 import Modal from "../components/Modal";
+import Pagination from "../components/Pagination";
+
+const emptyForm = { name: "", category: "", description: "", supporter_phone_number: "" };
+
+const COLUMNS = [
+  { key: "id", label: "ID" },
+  { key: "name", label: "Brand" },
+  { key: "category_name", label: "Category" },
+  { key: "description", label: "Description" },
+  { key: "supporter_phone_number", label: "Support phone" },
+  { key: "status", label: "Status" },
+  { key: "created_at", label: "Created at" },
+  { key: "created_by_name", label: "Created by" },
+  { key: "updated_at", label: "Updated at" },
+  { key: "updated_by_name", label: "Updated by" },
+];
+
+function csvEscape(value) {
+  const s = String(value ?? "");
+  if (/[",\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+  return s;
+}
+
+function formatDate(value) {
+  if (!value) return "";
+  return new Date(value).toLocaleString();
+}
 
 export default function Brands() {
   const [brands, setBrands] = useState([]);
+  const [count, setCount] = useState(0);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(50);
   const [categories, setCategories] = useState([]);
-  const [name, setName] = useState("");
-  const [category, setCategory] = useState("");
-  const [description, setDescription] = useState("");
-  const [supporterPhone, setSupporterPhone] = useState("");
+  const [form, setForm] = useState(emptyForm);
   const [error, setError] = useState("");
+  const [showAdd, setShowAdd] = useState(false);
+  const [editingId, setEditingId] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [search, setSearch] = useState("");
+  const [colFilters, setColFilters] = useState({});
 
   const load = useCallback(() => {
-    api.get("/inventory/brands/").then((res) => setBrands(res.data.results));
-  }, []);
+    api.get(`/inventory/brands/?page=${page}&page_size=${pageSize}`).then((res) => {
+      setBrands(res.data.results);
+      setCount(res.data.count);
+    });
+  }, [page, pageSize]);
 
   useEffect(() => {
     load();
     api.get("/inventory/categories/").then((res) => setCategories(res.data.results));
   }, [load]);
 
-  const create = async (e) => {
+  const pageCount = Math.max(1, Math.ceil(count / pageSize));
+  const goToPage = (p) => setPage(Math.min(Math.max(1, p), pageCount));
+  const changePageSize = (n) => { setPageSize(n); setPage(1); };
+  const setColFilter = (key, value) => setColFilters((f) => ({ ...f, [key]: value }));
+
+  const rows = useMemo(() => {
+    return brands.map((b) => ({
+      id: b.id,
+      name: b.name || "",
+      category_name: b.category_name || "",
+      description: b.description || "",
+      supporter_phone_number: b.supporter_phone_number || "",
+      status: b.is_active ? "active" : "inactive",
+      created_at: formatDate(b.created_at),
+      created_by_name: b.created_by_name || "",
+      updated_at: formatDate(b.updated_at),
+      updated_by_name: b.updated_by_name || "",
+      raw: b,
+    }));
+  }, [brands]);
+
+  const filteredRows = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return rows.filter((row) => {
+      if (q) {
+        const hit = COLUMNS.some((c) => String(row[c.key]).toLowerCase().includes(q));
+        if (!hit) return false;
+      }
+      return COLUMNS.every((c) => {
+        const val = colFilters[c.key];
+        if (!val) return true;
+        return String(row[c.key]).toLowerCase().includes(val.trim().toLowerCase());
+      });
+    });
+  }, [rows, search, colFilters]);
+
+  const openAdd = () => {
+    setEditingId(null);
+    setForm(emptyForm);
+    setError("");
+    setShowAdd(true);
+  };
+
+  const openEdit = (brand) => {
+    setEditingId(brand.id);
+    setForm({
+      name: brand.name || "",
+      category: brand.category ?? "",
+      description: brand.description || "",
+      supporter_phone_number: brand.supporter_phone_number || "",
+    });
+    setError("");
+    setShowAdd(true);
+  };
+
+  const submitForm = async (e) => {
     e.preventDefault();
     setError("");
+    setSaving(true);
     try {
-      await api.post("/inventory/brands/", {
-        name, category, description, supporter_phone_number: supporterPhone,
-      });
-      setName("");
-      setCategory("");
-      setDescription("");
-      setSupporterPhone("");
+      if (editingId) {
+        await api.patch(`/inventory/brands/${editingId}/`, form);
+      } else {
+        await api.post("/inventory/brands/", form);
+      }
+      setShowAdd(false);
       load();
     } catch (err) { setError(errorText(err)); }
+    finally { setSaving(false); }
   };
 
   const remove = async (id) => {
@@ -48,69 +141,179 @@ export default function Brands() {
     } catch (err) { setError(errorText(err)); }
   };
 
+  const exportCsv = async () => {
+    setExporting(true);
+    try {
+      let url = "/inventory/brands/?page_size=200";
+      let all = [];
+      while (url) {
+        const res = await api.get(url);
+        all = all.concat(res.data.results.map((b) => ({
+          id: b.id,
+          name: b.name || "",
+          category_name: b.category_name || "",
+          description: b.description || "",
+          supporter_phone_number: b.supporter_phone_number || "",
+          status: b.is_active ? "active" : "inactive",
+          created_at: formatDate(b.created_at),
+          created_by_name: b.created_by_name || "",
+          updated_at: formatDate(b.updated_at),
+          updated_by_name: b.updated_by_name || "",
+        })));
+        url = res.data.next ? res.data.next.replace(api.defaults.baseURL, "") : null;
+      }
+      const header = COLUMNS.map((c) => c.label).join(",");
+      const body = all
+        .map((row) => COLUMNS.map((c) => csvEscape(row[c.key])).join(","))
+        .join("\n");
+      const blob = new Blob([header + "\n" + body], { type: "text/csv;charset=utf-8;" });
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = `brands-${new Date().toISOString().slice(0, 10)}.csv`;
+      link.click();
+      URL.revokeObjectURL(link.href);
+    } finally {
+      setExporting(false);
+    }
+  };
+
   return (
     <>
       <h2 className="page">Brands</h2>
-      <Modal title={errorTitle(error)} message={error} onClose={() => setError("")} />
+      <Modal title={errorTitle(error)} message={showAdd ? "" : error} onClose={() => setError("")} />
+
       <div className="card">
-        <form className="row" onSubmit={create}>
-          <div className="field"><label>Category</label>
-            <select value={category} onChange={(e) => setCategory(e.target.value)} required>
-              <option value="">Select…</option>
-              {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select></div>
-          <div className="field"><label>Brand name</label>
-            <input value={name} placeholder="e.g. Apple"
-              onChange={(e) => setName(e.target.value)} required /></div>
-          <div className="field"><label>Description</label>
-            <input value={description} placeholder="Optional"
-              onChange={(e) => setDescription(e.target.value)} /></div>
-          <div className="field"><label>Support phone</label>
-            <input value={supporterPhone} placeholder="Optional"
-              onChange={(e) => setSupporterPhone(e.target.value)} /></div>
-          <div className="field" style={{ alignSelf: "end", flex: "0" }}>
-            <button>Add</button>
+        <div className="row">
+          <div className="field" style={{ flex: 2 }}>
+            <label>Global search</label>
+            <input
+              value={search}
+              placeholder="Search across all columns…"
+              onChange={(e) => setSearch(e.target.value)}
+            />
           </div>
-        </form>
-        {categories.length === 0 && (
-          <p style={{ fontSize: ".8rem", color: "#8a94a2", marginTop: ".6rem" }}>
-            Create a category first.
-          </p>
-        )}
+          <div className="field" style={{ alignSelf: "end", flex: 0, display: "flex", gap: ".6rem" }}>
+            <button className="ghost" onClick={openAdd}>+ Add Brand</button>
+            <button className="ghost" onClick={exportCsv} disabled={exporting}>
+              {exporting ? "Exporting…" : "Export CSV"}
+            </button>
+          </div>
+        </div>
       </div>
-      <div className="card">
-        <table>
-          <thead>
-            <tr>
-              <th>Brand</th><th>Category</th><th>Description</th><th>Support phone</th>
-              <th>Status</th><th />
-            </tr>
-          </thead>
-          <tbody>
-            {brands.map((b) => (
-              <tr key={b.id}>
-                <td>{b.name}</td>
-                <td>{b.category_name}</td>
-                <td style={{ color: "#5c6673" }}>{b.description || "—"}</td>
-                <td>{b.supporter_phone_number || "—"}</td>
-                <td>
-                  <button className="ghost small" onClick={() => toggleActive(b)}>
-                    <span className={`badge ${b.is_active ? "green" : "gray"}`}>
-                      {b.is_active ? "active" : "inactive"}
-                    </span>
-                  </button>
-                </td>
-                <td style={{ textAlign: "right" }}>
-                  <button className="danger small" onClick={() => remove(b.id)}>Delete</button>
-                </td>
+
+      <div className="card" style={{ padding: 0 }}>
+        <div className="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                {COLUMNS.map((c) => <th key={c.key}>{c.label}</th>)}
+                <th />
               </tr>
-            ))}
-            {brands.length === 0 && (
-              <tr><td colSpan={6} style={{ color: "#8a94a2" }}>Nothing yet — add the first brand above.</td></tr>
-            )}
-          </tbody>
-        </table>
+              <tr>
+                {COLUMNS.map((c) => (
+                  <th key={c.key} className="col-filter">
+                    <input
+                      value={colFilters[c.key] || ""}
+                      placeholder="Filter…"
+                      onChange={(e) => setColFilter(c.key, e.target.value)}
+                    />
+                  </th>
+                ))}
+                <th className="col-filter" />
+              </tr>
+            </thead>
+            <tbody>
+              {filteredRows.map((r) => (
+                <tr key={r.id}>
+                  {COLUMNS.map((c) => {
+                    if (c.key === "status") {
+                      return (
+                        <td key={c.key}>
+                          <button className="ghost small" onClick={() => toggleActive(r.raw)}>
+                            <span className={`badge ${r.status === "active" ? "green" : "gray"}`}>
+                              {r.status}
+                            </span>
+                          </button>
+                        </td>
+                      );
+                    }
+                    return (
+                      <td key={c.key} title={r[c.key] || undefined} style={c.key === "description" ? { color: "#5c6673" } : undefined}>
+                        {r[c.key] || "—"}
+                      </td>
+                    );
+                  })}
+                  <td>
+                    <div style={{ display: "flex", gap: ".4rem", justifyContent: "center" }}>
+                      <button
+                        className="icon-btn"
+                        title="Edit brand"
+                        aria-label="Edit brand"
+                        onClick={() => openEdit(r.raw)}
+                      >
+                        <Pencil size={15} />
+                      </button>
+                      <button
+                        className="icon-btn icon-btn-danger"
+                        title="Delete brand"
+                        aria-label="Delete brand"
+                        onClick={() => remove(r.id)}
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {filteredRows.length === 0 && (
+                <tr><td colSpan={COLUMNS.length + 1} style={{ color: "#8a94a2" }}>No brands match these filters.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+        <Pagination
+          page={page}
+          pageCount={pageCount}
+          count={count}
+          pageSize={pageSize}
+          onPageChange={goToPage}
+          onPageSizeChange={changePageSize}
+        />
       </div>
+
+      {showAdd && (
+        <div className="modal-overlay" onClick={() => setShowAdd(false)}>
+          <div className="modal-box modal-box-form" onClick={(e) => e.stopPropagation()}>
+            <h3>{editingId ? "Edit Brand" : "Add Brand"}</h3>
+            {error && <div className="error">{error}</div>}
+            <form onSubmit={submitForm}>
+              <div className="field"><label>Category</label>
+                <select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} required>
+                  <option value="">Select…</option>
+                  {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select></div>
+              <div className="field"><label>Brand name</label>
+                <input value={form.name} placeholder="e.g. Apple"
+                  onChange={(e) => setForm({ ...form, name: e.target.value })} required /></div>
+              <div className="field"><label>Description</label>
+                <input value={form.description} placeholder="Optional"
+                  onChange={(e) => setForm({ ...form, description: e.target.value })} /></div>
+              <div className="field"><label>Support phone</label>
+                <input value={form.supporter_phone_number} placeholder="Optional"
+                  onChange={(e) => setForm({ ...form, supporter_phone_number: e.target.value })} /></div>
+              {categories.length === 0 && (
+                <p style={{ fontSize: ".8rem", color: "#8a94a2" }}>Create a category first.</p>
+              )}
+              <div className="modal-form-actions">
+                <button type="button" className="ghost" onClick={() => setShowAdd(false)}>Cancel</button>
+                <button type="submit" disabled={saving}>
+                  {saving ? "Saving…" : editingId ? "Save changes" : "Add brand"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </>
   );
 }

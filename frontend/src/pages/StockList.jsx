@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, errorText } from "../api";
+import Pagination from "../components/Pagination";
 
 const COLUMNS = [
   { key: "product_name", label: "Product" },
@@ -17,6 +18,8 @@ const emptyWarrantyForm = { warrant_id: "", warranty_type: "manufacturer", durat
 export default function StockList() {
   const [units, setUnits] = useState([]);
   const [count, setCount] = useState(0);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(50);
   const [filters, setFilters] = useState({ condition: "", is_sold: "false", imei: "" });
   const [search, setSearch] = useState("");
   const [colFilters, setColFilters] = useState({});
@@ -28,6 +31,8 @@ export default function StockList() {
 
   const load = useCallback(() => {
     const params = new URLSearchParams();
+    params.set("page", String(page));
+    params.set("page_size", String(pageSize));
     if (filters.condition) params.set("condition", filters.condition);
     if (filters.is_sold) params.set("is_sold", filters.is_sold);
     if (filters.imei) params.set("imei", filters.imei.trim());
@@ -35,7 +40,7 @@ export default function StockList() {
       setUnits(res.data.results);
       setCount(res.data.count);
     });
-  }, [filters]);
+  }, [page, pageSize, filters]);
 
   useEffect(load, [load]);
 
@@ -69,6 +74,9 @@ export default function StockList() {
   }, [rows, search, colFilters]);
 
   const setColFilter = (key, value) => setColFilters((f) => ({ ...f, [key]: value }));
+  const pageCount = Math.max(1, Math.ceil(count / pageSize));
+  const goToPage = (p) => setPage(Math.min(Math.max(1, p), pageCount));
+  const changePageSize = (n) => { setPageSize(n); setPage(1); };
 
   const openWarranty = (row) => {
     setWarrantyUnit(row);
@@ -102,9 +110,9 @@ export default function StockList() {
         <div className="row">
           <div className="field"><label>IMEI search (exact)</label>
             <input value={filters.imei} placeholder="358743110912345"
-              onChange={(e) => setFilters({ ...filters, imei: e.target.value })} /></div>
+              onChange={(e) => { setFilters({ ...filters, imei: e.target.value }); setPage(1); }} /></div>
           <div className="field"><label>Condition</label>
-            <select value={filters.condition} onChange={(e) => setFilters({ ...filters, condition: e.target.value })}>
+            <select value={filters.condition} onChange={(e) => { setFilters({ ...filters, condition: e.target.value }); setPage(1); }}>
               <option value="">All</option>
               <option value="new">New</option>
               <option value="open_box">Open box</option>
@@ -112,14 +120,14 @@ export default function StockList() {
               <option value="used">Used</option>
             </select></div>
           <div className="field"><label>Status</label>
-            <select value={filters.is_sold} onChange={(e) => setFilters({ ...filters, is_sold: e.target.value })}>
+            <select value={filters.is_sold} onChange={(e) => { setFilters({ ...filters, is_sold: e.target.value }); setPage(1); }}>
               <option value="">All</option>
               <option value="false">In stock</option>
               <option value="true">Sold</option>
             </select></div>
         </div>
         <div className="field" style={{ marginTop: ".6rem" }}>
-          <label>Global search</label>
+          <label>Search this page</label>
           <input
             value={search}
             placeholder="Search across product, brand, SKU, IMEI, branch…"
@@ -127,49 +135,57 @@ export default function StockList() {
           />
         </div>
       </div>
-      <div className="card">
-        <table>
-          <thead>
-            <tr>
-              {COLUMNS.map((c) => <th key={c.key}>{c.label}</th>)}
-              <th>Warranty</th>
-            </tr>
-            <tr>
-              {COLUMNS.map((c) => (
-                <th key={c.key} style={{ paddingTop: 0, paddingBottom: ".5rem" }}>
-                  <input
-                    className="small"
-                    style={{ fontSize: ".78rem", padding: ".3rem .4rem" }}
-                    value={colFilters[c.key] || ""}
-                    placeholder="Filter…"
-                    onChange={(e) => setColFilter(c.key, e.target.value)}
-                  />
-                </th>
-              ))}
-              <th />
-            </tr>
-          </thead>
-          <tbody>
-            {filteredRows.map((r) => (
-              <tr key={r.id}>
-                <td>{r.product_name}</td>
-                <td>{r.brand_name}</td>
-                <td>{r.sku_label}</td>
-                <td>{r.sell_price}</td>
-                <td style={{ fontFamily: "monospace" }}>{r.imei_serial}</td>
-                <td>{r.branch_name}</td>
-                <td><span className="badge gray">{r.condition}</span></td>
-                <td><span className={`badge ${r.status === "sold" ? "red" : "green"}`}>{r.status}</span></td>
-                <td>
-                  <button className="ghost small" onClick={() => openWarranty(r)}>Warranty</button>
-                </td>
+      <div className="card" style={{ padding: 0 }}>
+        <div className="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                {COLUMNS.map((c) => <th key={c.key}>{c.label}</th>)}
+                <th>Warranty</th>
               </tr>
-            ))}
-            {filteredRows.length === 0 && (
-              <tr><td colSpan={COLUMNS.length + 1} style={{ color: "#8a94a2" }}>No units match these filters.</td></tr>
-            )}
-          </tbody>
-        </table>
+              <tr>
+                {COLUMNS.map((c) => (
+                  <th key={c.key} className="col-filter">
+                    <input
+                      value={colFilters[c.key] || ""}
+                      placeholder="Filter…"
+                      onChange={(e) => setColFilter(c.key, e.target.value)}
+                    />
+                  </th>
+                ))}
+                <th className="col-filter" />
+              </tr>
+            </thead>
+            <tbody>
+              {filteredRows.map((r) => (
+                <tr key={r.id}>
+                  <td title={r.product_name}>{r.product_name}</td>
+                  <td title={r.brand_name}>{r.brand_name}</td>
+                  <td title={r.sku_label}>{r.sku_label}</td>
+                  <td>{r.sell_price}</td>
+                  <td style={{ fontFamily: "monospace" }}>{r.imei_serial}</td>
+                  <td title={r.branch_name}>{r.branch_name}</td>
+                  <td><span className="badge gray">{r.condition}</span></td>
+                  <td><span className={`badge ${r.status === "sold" ? "red" : "green"}`}>{r.status}</span></td>
+                  <td>
+                    <button className="ghost small" onClick={() => openWarranty(r)}>Warranty</button>
+                  </td>
+                </tr>
+              ))}
+              {filteredRows.length === 0 && (
+                <tr><td colSpan={COLUMNS.length + 1} style={{ color: "#8a94a2" }}>No units match these filters.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+        <Pagination
+          page={page}
+          pageCount={pageCount}
+          count={count}
+          pageSize={pageSize}
+          onPageChange={goToPage}
+          onPageSizeChange={changePageSize}
+        />
       </div>
 
       {warrantyUnit && (

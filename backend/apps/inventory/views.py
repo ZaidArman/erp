@@ -1,15 +1,14 @@
 from django.db import IntegrityError, transaction
-from django.db.models import CharField, OuterRef, Q, Subquery, Value
-from django.db.models.functions import Cast, Coalesce, NullIf
+from django.db.models import CharField, Q
+from django.db.models.functions import Cast
 from rest_framework import serializers as drf_serializers
 from rest_framework import status
 from rest_framework.decorators import action
-from rest_framework.pagination import PageNumberPagination
 from rest_framework.response import Response
 
 from apps.accounts.permissions import HasEmployeePermission, IsAdminOrReadOnlyEmployee
-from apps.core.audit import log_action
-from apps.core.models import AuditLog
+from apps.core.audit import audit_name_subquery, log_action
+from apps.core.pagination import StandardPagination
 from apps.core.viewsets import TenantAwareViewSet
 
 from .models import SKU, Brand, Category, Product, StockUnit, StockWarranty, Supplier
@@ -40,7 +39,10 @@ class BrandViewSet(TenantAwareViewSet):
     permission_classes = [MANAGE_INVENTORY]
 
     def get_queryset(self):
-        qs = super().get_queryset()
+        qs = super().get_queryset().annotate(
+            created_by_name=audit_name_subquery("Brand", action_filter="create"),
+            updated_by_name=audit_name_subquery("Brand"),
+        )
         category = self.request.query_params.get("category")
         if category:
             qs = qs.filter(category_id=category)
@@ -194,10 +196,8 @@ class StockWarrantyViewSet(TenantAwareViewSet):
         return qs
 
 
-class ProductReportPagination(PageNumberPagination):
+class ProductReportPagination(StandardPagination):
     page_size = 20
-    page_size_query_param = "page_size"
-    max_page_size = 200
 
 
 class ProductReportViewSet(TenantAwareViewSet):
@@ -224,30 +224,21 @@ class ProductReportViewSet(TenantAwareViewSet):
         "imei_serial": "imei_serial",
         "branch_name": "branch__name",
         "condition": "condition",
+        "model_number": "sku__product__model_number",
+        "product_code": "sku__product__product_code",
+        "barcode": "sku__product__barcode",
+        "product_color": "sku__product__product_color",
     }
-
-    def _audit_name_subquery(self, action_filter=None):
-        """Latest AuditLog user (display name) for this StockUnit row,
-        optionally restricted to a specific action (e.g. 'create')."""
-        logs = AuditLog.objects.filter(
-            tenant_id=OuterRef("tenant_id"),
-            model_name="StockUnit",
-            object_id=Cast(OuterRef("pk"), output_field=CharField()),
-        )
-        if action_filter:
-            logs = logs.filter(action=action_filter)
-        logs = logs.order_by("-timestamp").annotate(
-            display_name=Coalesce(
-                NullIf("user__full_name", Value("")), "user__email", output_field=CharField()
-            )
-        )
-        return Subquery(logs.values("display_name")[:1], output_field=CharField())
 
     def get_queryset(self):
         qs = super().get_queryset().annotate(
-            created_by_name=self._audit_name_subquery(action_filter="create"),
-            updated_by_name=self._audit_name_subquery(),
+            created_by_name=audit_name_subquery("StockUnit", "pk", action_filter="create"),
+            updated_by_name=audit_name_subquery("StockUnit", "pk"),
+            product_updated_by_name=audit_name_subquery("Product", "sku__product_id"),
         )
+        # Deleted products stay in the DB (soft delete keeps the audit trail),
+        # but they don't belong in the everyday Products report.
+        qs = qs.filter(sku__product__deleted_at__isnull=True)
         params = self.request.query_params
 
         search = params.get("search")

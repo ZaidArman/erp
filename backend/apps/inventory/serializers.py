@@ -14,15 +14,23 @@ class CategorySerializer(serializers.ModelSerializer):
 
 
 class BrandSerializer(serializers.ModelSerializer):
+    """created_by_name / updated_by_name are annotated onto the queryset by
+    BrandViewSet (AuditLog subqueries) — Brand itself doesn't store who did
+    what, consistent with the rest of the app (see ProductReportSerializer)."""
+
     category = TenantPKRelatedField(queryset=Category.objects.all())
     category_name = serializers.CharField(source="category.name", read_only=True)
+    created_by_name = serializers.CharField(read_only=True, allow_null=True, required=False)
+    updated_by_name = serializers.CharField(read_only=True, allow_null=True, required=False)
 
     class Meta:
         model = Brand
         fields = [
             "id", "name", "category", "category_name",
             "description", "supporter_phone_number", "is_active",
+            "created_at", "updated_at", "created_by_name", "updated_by_name",
         ]
+        read_only_fields = ["created_at", "updated_at"]
 
 
 class SupplierSerializer(serializers.ModelSerializer):
@@ -153,12 +161,62 @@ class ProductReportSerializer(StockUnitSerializer):
     created_by_name = serializers.CharField(read_only=True, allow_null=True)
     updated_by_name = serializers.CharField(read_only=True, allow_null=True)
 
+    # Product-level fields, duplicated onto every stock-unit row (same as
+    # category_name/brand_name above) so the Products table can show the
+    # full product record without a second request per row.
+    model_number = serializers.CharField(source="sku.product.model_number", read_only=True)
+    product_code = serializers.CharField(source="sku.product.product_code", read_only=True)
+    barcode = serializers.CharField(source="sku.product.barcode", read_only=True)
+    qr_code = serializers.CharField(source="sku.product.qr_code", read_only=True)
+    warranty_required = serializers.BooleanField(source="sku.product.warranty_required", read_only=True)
+    warranty_period = serializers.IntegerField(source="sku.product.warranty_period", read_only=True, allow_null=True)
+    warranty_terms = serializers.CharField(source="sku.product.warranty_terms", read_only=True)
+    minimum_stock = serializers.IntegerField(source="sku.product.minimum_stock", read_only=True, allow_null=True)
+    maximum_stock = serializers.IntegerField(source="sku.product.maximum_stock", read_only=True, allow_null=True)
+    product_color = serializers.CharField(source="sku.product.product_color", read_only=True)
+    purchase_price = serializers.DecimalField(
+        source="sku.product.purchase_price", max_digits=12, decimal_places=2, read_only=True, allow_null=True
+    )
+    cost_price = serializers.DecimalField(
+        source="sku.product.cost_price", max_digits=12, decimal_places=2, read_only=True, allow_null=True
+    )
+    selling_price = serializers.DecimalField(
+        source="sku.product.selling_price", max_digits=12, decimal_places=2, read_only=True, allow_null=True
+    )
+    profit_margin = serializers.DecimalField(
+        source="sku.product.profit_margin", max_digits=12, decimal_places=2, read_only=True, allow_null=True
+    )
+    product_is_active = serializers.BooleanField(source="sku.product.is_active", read_only=True)
+
+    # Product-level edit/delete history — separate from the StockUnit-level
+    # created_by_name/updated_by_name above. product_updated_at/deleted_at
+    # come straight off Product's own columns; the "by" names are annotated
+    # onto the queryset by ProductReportViewSet (see product_updated_by_name
+    # subquery, scoped to AuditLog rows for the Product, not the StockUnit).
+    product_updated_at = serializers.DateTimeField(source="sku.product.updated_at", read_only=True)
+    product_updated_by_name = serializers.CharField(read_only=True, allow_null=True)
+    product_deleted_at = serializers.DateTimeField(source="sku.product.deleted_at", read_only=True, allow_null=True)
+    product_deleted_by_name = serializers.SerializerMethodField()
+
     class Meta(StockUnitSerializer.Meta):
         fields = StockUnitSerializer.Meta.fields + [
             "product_id", "category_name",
             "created_at", "updated_at",
             "created_by_name", "updated_by_name",
+            "model_number", "product_code", "barcode", "qr_code",
+            "warranty_required", "warranty_period", "warranty_terms",
+            "minimum_stock", "maximum_stock", "product_color",
+            "purchase_price", "cost_price", "selling_price", "profit_margin",
+            "product_is_active",
+            "product_updated_at", "product_updated_by_name",
+            "product_deleted_at", "product_deleted_by_name",
         ]
+
+    def get_product_deleted_by_name(self, obj):
+        user = obj.sku.product.deleted_by
+        if not user:
+            return None
+        return user.full_name or user.email
 
 
 class BulkIntakeSerializer(serializers.Serializer):

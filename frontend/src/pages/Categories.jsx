@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, errorText, errorTitle } from "../api";
 import Modal from "../components/Modal";
+import Pagination from "../components/Pagination";
 
 const FIELD_TYPES = [
   { value: "text", label: "Text" },
@@ -11,16 +12,26 @@ const emptyField = () => ({ key: "", label: "", type: "text" });
 
 export default function Categories() {
   const [categories, setCategories] = useState([]);
+  const [count, setCount] = useState(0);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(50);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [fields, setFields] = useState([]);
   const [error, setError] = useState("");
 
   const load = useCallback(() => {
-    api.get("/inventory/categories/").then((res) => setCategories(res.data.results));
-  }, []);
+    api.get(`/inventory/categories/?page=${page}&page_size=${pageSize}`).then((res) => {
+      setCategories(res.data.results);
+      setCount(res.data.count);
+    });
+  }, [page, pageSize]);
 
   useEffect(load, [load]);
+
+  const pageCount = Math.max(1, Math.ceil(count / pageSize));
+  const goToPage = (p) => setPage(Math.min(Math.max(1, p), pageCount));
+  const changePageSize = (n) => { setPageSize(n); setPage(1); };
 
   const addField = () => setFields((f) => [...f, emptyField()]);
   const updateField = (idx, patch) =>
@@ -104,38 +115,48 @@ export default function Categories() {
         </form>
       </div>
 
-      <div className="card">
-        <table>
-          <thead><tr><th>Category</th><th>Description</th><th>Custom fields</th><th>Status</th><th /></tr></thead>
-          <tbody>
-            {categories.map((c) => (
-              <tr key={c.id}>
-                <td>{c.name}</td>
-                <td style={{ color: "#5c6673" }}>{c.description || "—"}</td>
-                <td>
-                  {(c.attribute_schema || []).length === 0
-                    ? <span style={{ color: "#8a94a2" }}>—</span>
-                    : c.attribute_schema.map((f) => (
-                        <span key={f.key} className="badge gray" style={{ marginRight: ".3rem" }}>{f.label}</span>
-                      ))}
-                </td>
-                <td>
-                  <button className="ghost small" onClick={() => toggleActive(c)}>
-                    <span className={`badge ${c.is_active ? "green" : "gray"}`}>
-                      {c.is_active ? "active" : "inactive"}
-                    </span>
-                  </button>
-                </td>
-                <td style={{ textAlign: "right" }}>
-                  <button className="danger small" onClick={() => remove(c.id)}>Delete</button>
-                </td>
-              </tr>
-            ))}
-            {categories.length === 0 && (
-              <tr><td colSpan={5} style={{ color: "#8a94a2" }}>Nothing yet — add the first category above.</td></tr>
-            )}
-          </tbody>
-        </table>
+      <div className="card" style={{ padding: 0 }}>
+        <div className="table-scroll">
+          <table>
+            <thead><tr><th>Category</th><th>Description</th><th>Custom fields</th><th>Status</th><th /></tr></thead>
+            <tbody>
+              {categories.map((c) => (
+                <tr key={c.id}>
+                  <td>{c.name}</td>
+                  <td style={{ color: "#5c6673" }} title={c.description}>{c.description || "—"}</td>
+                  <td>
+                    {(c.attribute_schema || []).length === 0
+                      ? <span style={{ color: "#8a94a2" }}>—</span>
+                      : c.attribute_schema.map((f) => (
+                          <span key={f.key} className="badge gray" style={{ marginRight: ".3rem" }}>{f.label}</span>
+                        ))}
+                  </td>
+                  <td>
+                    <button className="ghost small" onClick={() => toggleActive(c)}>
+                      <span className={`badge ${c.is_active ? "green" : "gray"}`}>
+                        {c.is_active ? "active" : "inactive"}
+                      </span>
+                    </button>
+                  </td>
+                  <td style={{ textAlign: "right" }}>
+                    <button className="danger small" onClick={() => remove(c.id)}>Delete</button>
+                  </td>
+                </tr>
+              ))}
+              {categories.length === 0 && (
+                <tr><td colSpan={5} style={{ color: "#8a94a2" }}>Nothing yet — add the first category above.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+        <Pagination
+          page={page}
+          pageCount={pageCount}
+          count={count}
+          pageSize={pageSize}
+          onPageChange={goToPage}
+          onPageSizeChange={changePageSize}
+        />
       </div>
     </>
   );

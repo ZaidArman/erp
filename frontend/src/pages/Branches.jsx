@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, errorText, errorTitle } from "../api";
 import Modal from "../components/Modal";
+import Pagination from "../components/Pagination";
 
 const emptyForm = {
   name: "", address: "", branch_code: "", email: "",
@@ -9,11 +10,23 @@ const emptyForm = {
 
 export default function Branches() {
   const [branches, setBranches] = useState([]);
+  const [count, setCount] = useState(0);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(50);
   const [form, setForm] = useState(emptyForm);
   const [error, setError] = useState("");
 
-  const load = () => api.get("/tenants/branches/").then((res) => setBranches(res.data.results));
-  useEffect(() => { load(); }, []);
+  const load = () => {
+    api.get(`/tenants/branches/?page=${page}&page_size=${pageSize}`).then((res) => {
+      setBranches(res.data.results);
+      setCount(res.data.count);
+    });
+  };
+  useEffect(load, [page, pageSize]);
+
+  const pageCount = Math.max(1, Math.ceil(count / pageSize));
+  const goToPage = (p) => setPage(Math.min(Math.max(1, p), pageCount));
+  const changePageSize = (n) => { setPageSize(n); setPage(1); };
 
   const create = async (e) => {
     e.preventDefault();
@@ -68,8 +81,8 @@ export default function Branches() {
           Creation is blocked automatically when your plan's branch limit is reached.
         </p>
       </div>
-      <div className="card">
-        <div style={{ overflowX: "auto" }}>
+      <div className="card" style={{ padding: 0 }}>
+        <div className="table-scroll">
           <table>
             <thead>
               <tr>
@@ -82,7 +95,7 @@ export default function Branches() {
                 <tr key={b.id}>
                   <td>{b.name}</td>
                   <td>{b.branch_code || "—"}</td>
-                  <td>{b.address || "—"}</td>
+                  <td title={b.address}>{b.address || "—"}</td>
                   <td>{b.branch_city || "—"}</td>
                   <td>{b.branch_province || "—"}</td>
                   <td>{b.email || "—"}</td>
@@ -96,9 +109,20 @@ export default function Branches() {
                   </td>
                 </tr>
               ))}
+              {branches.length === 0 && (
+                <tr><td colSpan={8} style={{ color: "#8a94a2" }}>Nothing yet — create the first branch above.</td></tr>
+              )}
             </tbody>
           </table>
         </div>
+        <Pagination
+          page={page}
+          pageCount={pageCount}
+          count={count}
+          pageSize={pageSize}
+          onPageChange={goToPage}
+          onPageSizeChange={changePageSize}
+        />
       </div>
     </>
   );

@@ -53,14 +53,53 @@ a { color: #2e5e8c; text-decoration: none; }
 }
 .sidebar.collapsed .sidebar-bottom button .nav-text { display: none; }
 
-.main { flex: 1; padding: 1.6rem 2rem; }
+.main { flex: 1; min-width: 0; padding: 1.6rem 2rem; }
 
-.pagination {
-  display: flex; align-items: center; gap: 1rem; padding: .9rem 1.3rem;
-  flex-wrap: wrap;
+.table-scroll {
+  overflow: auto;
+  max-height: 65vh;
 }
-.pagination .slider { flex: 1; min-width: 160px; accent-color: #2e5e8c; }
-.pagination .page-info { font-size: .85rem; color: #5c6673; white-space: nowrap; }
+.table-scroll thead th {
+  position: sticky;
+  top: 0;
+  background: #f8fafc;
+  z-index: 1;
+}
+.table-scroll th, .table-scroll td {
+  white-space: nowrap;
+  padding-left: .9rem;
+  padding-right: .9rem;
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.table-scroll .col-filter {
+  padding: .5rem .5rem .7rem;
+}
+.table-scroll .col-filter input {
+  font-size: .78rem;
+  padding: .35rem .5rem;
+  background: #fbfcfd;
+}
+
+.pager {
+  display: flex; align-items: center; gap: 1rem; padding: .8rem 1.3rem;
+  flex-wrap: wrap; border-top: 1px solid #eef1f5;
+}
+.pager-count { font-size: .82rem; color: #6a7482; white-space: nowrap; }
+.pager-pages { display: flex; align-items: center; gap: .25rem; flex: 1; flex-wrap: wrap; }
+.pager-btn {
+  background: #fff; color: #3d4552; border: 1px solid #e4e9f0; border-radius: 6px;
+  min-width: 2rem; height: 2rem; padding: 0 .5rem; font-size: .82rem; font-weight: 500;
+  display: inline-flex; align-items: center; justify-content: center; cursor: pointer;
+}
+.pager-btn:hover:not(:disabled) { background: #f4f6f9; border-color: #cdd6e1; }
+.pager-btn:disabled { color: #c3ccd6; cursor: not-allowed; }
+.pager-btn.active { background: #2e5e8c; border-color: #2e5e8c; color: #fff; }
+.pager-ellipsis { color: #8a94a2; padding: 0 .2rem; font-size: .82rem; }
+.pager-size {
+  width: auto; font-size: .82rem; padding: .4rem .6rem; color: #3d4552;
+}
 
 .tabs { display: flex; gap: .4rem; margin-bottom: 1.1rem; border-bottom: 2px solid #e4e9f0; }
 .tabs .tab {
@@ -76,9 +115,18 @@ h2.page { font-size: 1.25rem; color: #1f3864; margin-bottom: 1.1rem; }
 .card h3 { font-size: .98rem; margin-bottom: .8rem; color: #2e5e8c; }
 
 table { width: 100%; border-collapse: collapse; font-size: .9rem; }
-th { text-align: left; color: #5c6673; font-weight: 600; padding: .5rem .6rem; border-bottom: 2px solid #e4e9f0; }
-td { padding: .5rem .6rem; border-bottom: 1px solid #eef1f5; }
-tr:hover td { background: #f8fafc; }
+th {
+  text-align: center; color: #2e3a4d; font-weight: 700; padding: .65rem .7rem;
+  border-bottom: 2px solid #e4e9f0; border-right: 1px solid #eef1f5;
+  letter-spacing: .01em;
+}
+th:last-child { border-right: 0; }
+td {
+  padding: .55rem .7rem; border-bottom: 1px solid #eef1f5; border-right: 1px solid #f4f6f8;
+}
+td:last-child { border-right: 0; }
+tbody tr:nth-child(even) td { background: #fbfcfe; }
+tr:hover td { background: #eef4fa; }
 
 input, select { padding: .5rem .6rem; border: 1px solid #cdd6e1; border-radius: 6px; font-size: .9rem; width: 100%; }
 label { font-size: .8rem; color: #5c6673; display: block; margin-bottom: .25rem; }
@@ -91,6 +139,14 @@ button:hover { background: #24496d; }
 button.ghost { background: transparent; color: #2e5e8c; border: 1px solid #2e5e8c; }
 button.danger { background: #a32d2d; }
 button.small { padding: .3rem .6rem; font-size: .78rem; }
+
+.icon-btn {
+  background: transparent; color: #2e5e8c; border: 1px solid #cdd6e1; border-radius: 6px;
+  width: 1.9rem; height: 1.9rem; padding: 0; display: inline-flex; align-items: center; justify-content: center;
+}
+.icon-btn:hover { background: #eef4fa; border-color: #2e5e8c; }
+.icon-btn-danger { color: #a32d2d; }
+.icon-btn-danger:hover { background: #fbeaea; border-color: #a32d2d; }
 
 .error { background: #fbeaea; color: #a32d2d; padding: .6rem .8rem; border-radius: 6px; font-size: .85rem; margin-bottom: .9rem; }
 .ok { background: #e3f2e8; color: #1d7a46; padding: .6rem .8rem; border-radius: 6px; font-size: .85rem; margin-bottom: .9rem; }
