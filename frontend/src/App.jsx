@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { Navigate, NavLink, Route, Routes } from "react-router-dom";
 import {
-  Bookmark,
   Boxes,
   Building2,
   ChevronsLeft,
@@ -77,9 +76,6 @@ function Layout({ children }) {
               <div className="nav-group-title">Inventory</div>
               <NavLink to="/categories" className="nav-link" title="Categories">
                 <span className="nav-icon"><Tags size={18} /></span><span className="nav-text">Categories</span>
-              </NavLink>
-              <NavLink to="/brands" className="nav-link" title="Brands">
-                <span className="nav-icon"><Bookmark size={18} /></span><span className="nav-text">Brands</span>
               </NavLink>
               <NavLink to="/products" className="nav-link" title="Products & SKUs">
                 <span className="nav-icon"><Tag size={18} /></span><span className="nav-text">Products &amp; SKUs</span>

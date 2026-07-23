@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "../api";
+import Brands from "./Brands";
 
 const PAGE_SIZE = 20;
 
@@ -46,6 +47,7 @@ function toDisplayRow(r) {
 }
 
 export default function ProductsReport() {
+  const [tab, setTab] = useState("products");
   const [rows, setRows] = useState([]);
   const [count, setCount] = useState(0);
   const [page, setPage] = useState(1);
@@ -109,6 +111,25 @@ export default function ProductsReport() {
 
   return (
     <>
+      <div className="tabs">
+        <button
+          className={`tab ${tab === "products" ? "active" : ""}`}
+          onClick={() => setTab("products")}
+        >
+          Products
+        </button>
+        <button
+          className={`tab ${tab === "brands" ? "active" : ""}`}
+          onClick={() => setTab("brands")}
+        >
+          Brands
+        </button>
+      </div>
+
+      {tab === "brands" ? (
+        <Brands />
+      ) : (
+        <>
       <h2 className="page">Products ({count})</h2>
       <div className="card">
         <div className="row">
@@ -189,6 +210,8 @@ export default function ProductsReport() {
           <span className="page-info">Page {page} / {pageCount}</span>
         </div>
       </div>
+        </>
+      )}
     </>
   );
 }

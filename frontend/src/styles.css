@@ -62,6 +62,15 @@ a { color: #2e5e8c; text-decoration: none; }
 .pagination .slider { flex: 1; min-width: 160px; accent-color: #2e5e8c; }
 .pagination .page-info { font-size: .85rem; color: #5c6673; white-space: nowrap; }
 
+.tabs { display: flex; gap: .4rem; margin-bottom: 1.1rem; border-bottom: 2px solid #e4e9f0; }
+.tabs .tab {
+  background: transparent; color: #5c6673; border: 0; border-bottom: 2px solid transparent;
+  border-radius: 0; padding: .6rem 1rem; font-size: .92rem; font-weight: 600;
+  margin-bottom: -2px; cursor: pointer;
+}
+.tabs .tab:hover { color: #2e5e8c; background: transparent; }
+.tabs .tab.active { color: #1f3864; border-bottom-color: #2e5e8c; }
+
 h2.page { font-size: 1.25rem; color: #1f3864; margin-bottom: 1.1rem; }
 .card { background: #fff; border-radius: 8px; padding: 1.1rem 1.3rem; box-shadow: 0 1px 4px rgba(0,0,0,.06); margin-bottom: 1.2rem; }
 .card h3 { font-size: .98rem; margin-bottom: .8rem; color: #2e5e8c; }
