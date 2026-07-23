@@ -54,8 +54,15 @@ export default function Brands() {
 
   useEffect(() => {
     load();
-    api.get("/inventory/categories/").then((res) => setCategories(res.data.results));
+    api.get("/inventory/categories/?page_size=200").then((res) => setCategories(res.data.results));
   }, [load]);
+
+  // Only active categories are selectable for new/changed assignments — but
+  // keep the brand's current category visible in the dropdown even if it was
+  // deactivated after assignment, so editing doesn't silently blank it out.
+  const categoryOptions = categories.filter(
+    (c) => c.is_active || String(c.id) === String(form.category)
+  );
 
   const pageCount = Math.max(1, Math.ceil(count / pageSize));
   const goToPage = (p) => setPage(Math.min(Math.max(1, p), pageCount));
@@ -290,7 +297,9 @@ export default function Brands() {
               <div className="field"><label>Category</label>
                 <select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} required>
                   <option value="">Select…</option>
-                  {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  {categoryOptions.map((c) => (
+                    <option key={c.id} value={c.id}>{c.name}{!c.is_active ? " (inactive)" : ""}</option>
+                  ))}
                 </select></div>
               <div className="field"><label>Brand name</label>
                 <input value={form.name} placeholder="e.g. Apple"

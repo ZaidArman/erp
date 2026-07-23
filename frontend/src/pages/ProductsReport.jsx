@@ -168,7 +168,7 @@ export default function ProductsReport() {
 
   const ensureBrandsLoaded = () => {
     if (brands.length === 0) {
-      api.get("/inventory/brands/").then((res) => setBrands(res.data.results));
+      api.get("/inventory/brands/?page_size=200").then((res) => setBrands(res.data.results));
     }
   };
 
@@ -211,6 +211,10 @@ export default function ProductsReport() {
   };
 
   const selectedBrand = brands.find((b) => String(b.id) === String(pForm.brand));
+  // Only active brands are selectable — but keep the product's current brand
+  // visible even if it was deactivated after assignment, so editing doesn't
+  // silently blank it out.
+  const brandOptions = brands.filter((b) => b.is_active || String(b.id) === String(pForm.brand));
 
   const previewMargin = useMemo(() => {
     const selling = parseFloat(pForm.selling_price);
@@ -364,7 +368,9 @@ export default function ProductsReport() {
                 <div className="field"><label>Brand</label>
                   <select value={pForm.brand} onChange={(e) => setPForm({ ...pForm, brand: e.target.value })} required>
                     <option value="">Select…</option>
-                    {brands.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+                    {brandOptions.map((b) => (
+                      <option key={b.id} value={b.id}>{b.name}{!b.is_active ? " (inactive)" : ""}</option>
+                    ))}
                   </select></div>
               </div>
               <div className="row">
