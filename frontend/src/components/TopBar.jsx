@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation } from "react-router-dom";
 import {
-  Bell, ChevronRight, LogOut, Moon, Plus, Search, Settings, Sun, User,
+  Bell, ChevronRight, LogOut, Moon, Settings, Sun, User,
 } from "lucide-react";
 import { useAuth } from "../AuthContext";
 import { applyTheme, getInitialTheme } from "../theme";
@@ -21,13 +21,6 @@ const ROUTE_TITLES = {
   "/branches": ["User management", "Branches"],
   "/employees": ["User management", "Employees"],
 };
-
-const QUICK_ADD = [
-  { label: "New sale", to: "/pos", permission: "can_use_pos" },
-  { label: "New product", to: "/products-list" },
-  { label: "Stock intake", to: "/stock/intake" },
-  { label: "New brand", to: "/products-list" },
-];
 
 function initials(user) {
   const source = user.full_name || user.email || "?";
@@ -52,16 +45,14 @@ function useClickOutside(onClose) {
 }
 
 export default function TopBar() {
-  const { user, logout, can } = useAuth();
+  const { user, logout } = useAuth();
   const location = useLocation();
-  const navigate = useNavigate();
   const [theme, setTheme] = useState(getInitialTheme());
-  const [openMenu, setOpenMenu] = useState(null); // "add" | "profile" | null
+  const [openMenu, setOpenMenu] = useState(null); // "profile" | null
 
   useEffect(() => { applyTheme(theme); }, [theme]);
 
   const crumbs = ROUTE_TITLES[location.pathname] || ["Nexora"];
-  const pageTitle = crumbs[crumbs.length - 1];
 
   const menuRef = useClickOutside(() => setOpenMenu(null));
 
@@ -69,45 +60,18 @@ export default function TopBar() {
     <div className="topbar">
       <div className="topbar-crumbs">
         <div className="breadcrumbs">
-          {crumbs.slice(0, -1).map((c) => (
+          {crumbs.map((c, i) => (
             <span key={c} style={{ display: "flex", alignItems: "center", gap: ".35rem" }}>
-              {c}<ChevronRight size={12} className="sep" />
+              {i > 0 && <ChevronRight size={12} className="sep" />}
+              {c}
             </span>
           ))}
         </div>
-        <div className="topbar-title">{pageTitle}</div>
       </div>
 
-      <div className="topbar-search">
-        <Search size={16} />
-        <input placeholder="Search products, sales, stock…" />
-        <span className="kbd">⌘K</span>
-      </div>
+      <div style={{ flex: 1 }} />
 
       <div className="topbar-actions" ref={menuRef}>
-        <div className="menu-wrap">
-          <button
-            className="quick-add-btn"
-            onClick={() => setOpenMenu(openMenu === "add" ? null : "add")}
-          >
-            <Plus size={15} /> Quick add
-          </button>
-          {openMenu === "add" && (
-            <div className="menu-popover">
-              <div className="menu-label">Create new</div>
-              {QUICK_ADD.filter((i) => !i.permission || can(i.permission)).map((item) => (
-                <button
-                  key={item.label}
-                  className="menu-item"
-                  onClick={() => { navigate(item.to); setOpenMenu(null); }}
-                >
-                  <Plus size={14} /> {item.label}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-
         <button className="icon-action" title="Notifications" aria-label="Notifications">
           <Bell size={17} />
           <span className="dot" />
