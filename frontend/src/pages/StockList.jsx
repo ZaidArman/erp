@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { api } from "../api";
+import { api, errorText } from "../api";
 
 const COLUMNS = [
   { key: "product_name", label: "Product" },
@@ -12,12 +12,19 @@ const COLUMNS = [
   { key: "status", label: "Status" },
 ];
 
+const emptyWarrantyForm = { warrant_id: "", warranty_type: "manufacturer", duration_months: "", coverage: "", terms: "" };
+
 export default function StockList() {
   const [units, setUnits] = useState([]);
   const [count, setCount] = useState(0);
   const [filters, setFilters] = useState({ condition: "", is_sold: "false", imei: "" });
   const [search, setSearch] = useState("");
   const [colFilters, setColFilters] = useState({});
+
+  const [warrantyUnit, setWarrantyUnit] = useState(null);
+  const [warranties, setWarranties] = useState([]);
+  const [warrantyForm, setWarrantyForm] = useState(emptyWarrantyForm);
+  const [warrantyError, setWarrantyError] = useState("");
 
   const load = useCallback(() => {
     const params = new URLSearchParams();
@@ -63,6 +70,31 @@ export default function StockList() {
 
   const setColFilter = (key, value) => setColFilters((f) => ({ ...f, [key]: value }));
 
+  const openWarranty = (row) => {
+    setWarrantyUnit(row);
+    setWarrantyForm(emptyWarrantyForm);
+    setWarrantyError("");
+    api.get(`/inventory/stock-warranties/?stock_unit=${row.id}`).then((res) => setWarranties(res.data.results));
+  };
+
+  const closeWarranty = () => {
+    setWarrantyUnit(null);
+    setWarranties([]);
+  };
+
+  const addWarranty = async (e) => {
+    e.preventDefault();
+    setWarrantyError("");
+    try {
+      const payload = { stock_unit: warrantyUnit.id, ...warrantyForm };
+      if (!payload.duration_months) delete payload.duration_months;
+      await api.post("/inventory/stock-warranties/", payload);
+      setWarrantyForm(emptyWarrantyForm);
+      const res = await api.get(`/inventory/stock-warranties/?stock_unit=${warrantyUnit.id}`);
+      setWarranties(res.data.results);
+    } catch (err) { setWarrantyError(errorText(err)); }
+  };
+
   return (
     <>
       <h2 className="page">Stock ({count})</h2>
@@ -100,6 +132,7 @@ export default function StockList() {
           <thead>
             <tr>
               {COLUMNS.map((c) => <th key={c.key}>{c.label}</th>)}
+              <th>Warranty</th>
             </tr>
             <tr>
               {COLUMNS.map((c) => (
@@ -113,6 +146,7 @@ export default function StockList() {
                   />
                 </th>
               ))}
+              <th />
             </tr>
           </thead>
           <tbody>
@@ -126,14 +160,68 @@ export default function StockList() {
                 <td>{r.branch_name}</td>
                 <td><span className="badge gray">{r.condition}</span></td>
                 <td><span className={`badge ${r.status === "sold" ? "red" : "green"}`}>{r.status}</span></td>
+                <td>
+                  <button className="ghost small" onClick={() => openWarranty(r)}>Warranty</button>
+                </td>
               </tr>
             ))}
             {filteredRows.length === 0 && (
-              <tr><td colSpan={COLUMNS.length} style={{ color: "#8a94a2" }}>No units match these filters.</td></tr>
+              <tr><td colSpan={COLUMNS.length + 1} style={{ color: "#8a94a2" }}>No units match these filters.</td></tr>
             )}
           </tbody>
         </table>
       </div>
+
+      {warrantyUnit && (
+        <div className="modal-overlay" onClick={closeWarranty}>
+          <div className="modal-box modal-box-form" onClick={(e) => e.stopPropagation()}>
+            <h3>Warranty — {warrantyUnit.imei_serial}</h3>
+            {warrantyError && <div className="error">{warrantyError}</div>}
+
+            {warranties.length > 0 && (
+              <div style={{ marginBottom: "1rem" }}>
+                {warranties.map((w) => (
+                  <div key={w.id} className="card" style={{ padding: ".7rem .9rem", marginBottom: ".5rem" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between" }}>
+                      <strong>{w.warranty_type === "extended" ? "Extended" : "Manufacturer"}</strong>
+                      <span className={`badge ${w.is_active ? "green" : "gray"}`}>{w.is_active ? "active" : "inactive"}</span>
+                    </div>
+                    {w.warrant_id && <div style={{ fontSize: ".8rem", color: "#5c6673" }}>ID: {w.warrant_id}</div>}
+                    {w.duration_months && <div style={{ fontSize: ".8rem", color: "#5c6673" }}>{w.duration_months} months</div>}
+                    {w.coverage && <div style={{ fontSize: ".8rem", color: "#5c6673" }}>Coverage: {w.coverage}</div>}
+                    {w.terms && <div style={{ fontSize: ".8rem", color: "#5c6673" }}>{w.terms}</div>}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <form onSubmit={addWarranty}>
+              <div className="field"><label>Warranty ID</label>
+                <input value={warrantyForm.warrant_id}
+                  onChange={(e) => setWarrantyForm({ ...warrantyForm, warrant_id: e.target.value })} /></div>
+              <div className="field"><label>Type</label>
+                <select value={warrantyForm.warranty_type}
+                  onChange={(e) => setWarrantyForm({ ...warrantyForm, warranty_type: e.target.value })}>
+                  <option value="manufacturer">Manufacturer</option>
+                  <option value="extended">Extended</option>
+                </select></div>
+              <div className="field"><label>Duration (months)</label>
+                <input type="number" min="0" value={warrantyForm.duration_months}
+                  onChange={(e) => setWarrantyForm({ ...warrantyForm, duration_months: e.target.value })} /></div>
+              <div className="field"><label>Coverage</label>
+                <input value={warrantyForm.coverage} placeholder="e.g. Parts, Labor"
+                  onChange={(e) => setWarrantyForm({ ...warrantyForm, coverage: e.target.value })} /></div>
+              <div className="field"><label>Terms</label>
+                <input value={warrantyForm.terms}
+                  onChange={(e) => setWarrantyForm({ ...warrantyForm, terms: e.target.value })} /></div>
+              <div className="modal-form-actions">
+                <button type="button" className="ghost" onClick={closeWarranty}>Close</button>
+                <button type="submit">Add warranty</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </>
   );
 }

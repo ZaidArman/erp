@@ -12,6 +12,7 @@ const emptyField = () => ({ key: "", label: "", type: "text" });
 export default function Categories() {
   const [categories, setCategories] = useState([]);
   const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
   const [fields, setFields] = useState([]);
   const [error, setError] = useState("");
 
@@ -37,8 +38,9 @@ export default function Categories() {
         type: f.type,
       }));
     try {
-      await api.post("/inventory/categories/", { name, attribute_schema });
+      await api.post("/inventory/categories/", { name, description, attribute_schema });
       setName("");
+      setDescription("");
       setFields([]);
       load();
     } catch (err) { setError(errorText(err)); }
@@ -48,6 +50,13 @@ export default function Categories() {
     if (!confirm("Delete this category?")) return;
     try { await api.delete(`/inventory/categories/${id}/`); load(); }
     catch (err) { setError(errorText(err)); }
+  };
+
+  const toggleActive = async (category) => {
+    try {
+      await api.patch(`/inventory/categories/${category.id}/`, { is_active: !category.is_active });
+      load();
+    } catch (err) { setError(errorText(err)); }
   };
 
   return (
@@ -61,6 +70,9 @@ export default function Categories() {
             <div className="field"><label>Category name</label>
               <input value={name} placeholder="e.g. Air Conditioners"
                 onChange={(e) => setName(e.target.value)} required /></div>
+            <div className="field"><label>Description</label>
+              <input value={description} placeholder="e.g. Electronics, Home Appliances"
+                onChange={(e) => setDescription(e.target.value)} /></div>
           </div>
 
           <label style={{ marginTop: ".4rem" }}>Custom fields for this category's products</label>
@@ -94,11 +106,12 @@ export default function Categories() {
 
       <div className="card">
         <table>
-          <thead><tr><th>Category</th><th>Custom fields</th><th /></tr></thead>
+          <thead><tr><th>Category</th><th>Description</th><th>Custom fields</th><th>Status</th><th /></tr></thead>
           <tbody>
             {categories.map((c) => (
               <tr key={c.id}>
                 <td>{c.name}</td>
+                <td style={{ color: "#5c6673" }}>{c.description || "—"}</td>
                 <td>
                   {(c.attribute_schema || []).length === 0
                     ? <span style={{ color: "#8a94a2" }}>—</span>
@@ -106,13 +119,20 @@ export default function Categories() {
                         <span key={f.key} className="badge gray" style={{ marginRight: ".3rem" }}>{f.label}</span>
                       ))}
                 </td>
+                <td>
+                  <button className="ghost small" onClick={() => toggleActive(c)}>
+                    <span className={`badge ${c.is_active ? "green" : "gray"}`}>
+                      {c.is_active ? "active" : "inactive"}
+                    </span>
+                  </button>
+                </td>
                 <td style={{ textAlign: "right" }}>
                   <button className="danger small" onClick={() => remove(c.id)}>Delete</button>
                 </td>
               </tr>
             ))}
             {categories.length === 0 && (
-              <tr><td colSpan={3} style={{ color: "#8a94a2" }}>Nothing yet — add the first category above.</td></tr>
+              <tr><td colSpan={5} style={{ color: "#8a94a2" }}>Nothing yet — add the first category above.</td></tr>
             )}
           </tbody>
         </table>

@@ -1,11 +1,12 @@
 """Inventory hierarchy: Category -> Brand -> Product -> SKU -> StockUnit
 (PRD section 3.2)."""
+from django.conf import settings
 from django.db import models
 
-from apps.core.models import TenantAwareModel
+from apps.core.models import SoftDeleteModel, TenantAwareModel
 
 
-class Category(TenantAwareModel):
+class Category(TenantAwareModel, SoftDeleteModel):
     """`attribute_schema` defines the custom SKU-level fields this category's
     products should capture (e.g. Mobiles: storage/RAM, AC: tonnage,
     Fridge: capacity in liters) — [{"key": "tonnage", "label": "Tonnage",
@@ -13,14 +14,12 @@ class Category(TenantAwareModel):
 
     name = models.CharField(max_length=255)
     attribute_schema = models.JSONField(default=list, blank=True)
-    # These fields will be added
-    # description # Category detail (e.g. Electronics, Home Appliances, etc.)
-    # is_active
-    # created_by # Who created this into the app (EMployee or Admin / Inserted by)
-    # updated_by # Who updated this into the app (EMployee or Admin / updated by)
-    # deleted_at # When this category was deleted (soft delete)
-    # deleted_by # Who deleted this category (soft delete)
-
+    description = models.TextField(blank=True, default="")
+    is_active = models.BooleanField(default=True)
+    deleted_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="+",
+    )
 
     class Meta:
         unique_together = ("tenant", "name")
@@ -31,17 +30,16 @@ class Category(TenantAwareModel):
         return self.name
 
 
-class Brand(TenantAwareModel):
+class Brand(TenantAwareModel, SoftDeleteModel):
     category = models.ForeignKey(Category, on_delete=models.PROTECT, related_name="brands")
     name = models.CharField(max_length=255)
-    # These fields will be added
-    # description
-    # supporter_phone_number 
-    # is_active
-    # created_by # Who created this into the app (EMployee or Admin / Inserted by)
-    # updated_by # Who updated this into the app (EMployee or Admin / updated by)
-    # deleted_at # When this brand was deleted (soft delete)
-    # Deleted_by # Who deleted this brand (soft delete)
+    description = models.TextField(blank=True, default="")
+    supporter_phone_number = models.CharField(max_length=32, blank=True, default="")
+    is_active = models.BooleanField(default=True)
+    deleted_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="+",
+    )
 
     class Meta:
         unique_together = ("tenant", "name")
@@ -63,33 +61,42 @@ class Supplier(TenantAwareModel):
         return self.name
 
 
-class Product(TenantAwareModel):
+class Product(TenantAwareModel, SoftDeleteModel):
+    """Pricing lives here, not on SKU/StockUnit: `purchase_price`,
+    `cost_price`, and `selling_price` are the single place a shop enters
+    prices. SKU.sell_price / StockUnit.purchase_cost still exist (checkout
+    and profit reports read them), but they're auto-filled from these
+    fields whenever a client doesn't supply its own value explicitly —
+    see SKUSerializer / BulkIntakeSerializer."""
+
     category = models.ForeignKey(Category, on_delete=models.PROTECT, related_name="products")
     brand = models.ForeignKey(Brand, on_delete=models.PROTECT, related_name="products")
     name = models.CharField(max_length=255)
     description = models.TextField(blank=True, default="")
 
-    # These fields will be added
-    # model_number # Product model number (i.e. iPhone 14, Samsung AC 1.5 Ton, LG Fridge 260L)
-    # product_code # product Internal Code (i.e. Phone001, AC001, Fridge001)
-    # barcode # product barcode (i.e. 1234567890123)
-    # qr_code # product QR code (i.e. https://example.com/product/1234567890123)
-    # warranty_required # Whether the product requires warranty (i.e. True/False)
-    # warranty_period # Warranty period in months (i.e. 12, 24, 36)
-    # warranty_terms # Warranty terms and conditions (i.e. "1 year warranty for manufacturing defects only")
-    # current_stock # How much units do you have in the stock(shop)
-    # minimum_stock # Minimum stock level for this product (i.e. 10, 20, 30)
-    # maximum_stock # Maximum stock level for this product (i.e. 100, 200, 300)
-    # product_color # Product color (i.e. Black, White, Silver, Gold)
-    # purchase_price # how much did you buy this product for (i.e. 1000, 2000, 3000)
-    # cost_price # how much does it cost to make this product (i.e. 800, 1800, 2800)
-    # selling_price # how much are you selling this product for (i.e. 1800, 3800, 5800)
-    # profit_margin # how much profit are you making on this product (i.e. 800, 1800, 2800)
-    # is_active # Whether the product is active (i.e. True/False)
-    # created_by # Who created this into the app (EMployee or Admin / Inserted by)
-    # updated_by # Who updated this into the app (EMployee or Admin / updated by)
-    # deleted_at # When this product was deleted (soft delete)
-    # deleted_by # Who deleted this product (soft delete)
+    model_number = models.CharField(max_length=100, blank=True, default="")
+    product_code = models.CharField(max_length=100, blank=True, default="")
+    barcode = models.CharField(max_length=100, blank=True, default="")
+    qr_code = models.CharField(max_length=255, blank=True, default="")
+
+    warranty_required = models.BooleanField(default=False)
+    warranty_period = models.PositiveIntegerField(null=True, blank=True, help_text="Months")
+    warranty_terms = models.TextField(blank=True, default="")
+
+    minimum_stock = models.PositiveIntegerField(null=True, blank=True)
+    maximum_stock = models.PositiveIntegerField(null=True, blank=True)
+    product_color = models.CharField(max_length=50, blank=True, default="")
+
+    purchase_price = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    cost_price = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    selling_price = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    profit_margin = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+
+    is_active = models.BooleanField(default=True)
+    deleted_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="+",
+    )
 
     class Meta:
         unique_together = ("tenant", "name")
@@ -98,9 +105,18 @@ class Product(TenantAwareModel):
     def __str__(self):
         return self.name
 
+    def save(self, *args, **kwargs):
+        if self.selling_price is not None and self.cost_price is not None:
+            self.profit_margin = self.selling_price - self.cost_price
+        else:
+            self.profit_margin = None
+        super().save(*args, **kwargs)
+
 
 class SKU(TenantAwareModel):
-    """The sellable variant. Carries the sell price (PRD 2.3)."""
+    """The sellable variant. Carries the sell price (PRD 2.3) — normally
+    inherited from Product.selling_price at creation time; see
+    SKUSerializer."""
 
     product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="skus")
     variant_name = models.CharField(max_length=255)
@@ -118,7 +134,9 @@ class SKU(TenantAwareModel):
 
 
 class StockUnit(TenantAwareModel):
-    """One physical unit. Carries IMEI, condition, purchase cost (PRD 2.3)."""
+    """One physical unit. Carries IMEI, condition, purchase cost (PRD 2.3) —
+    purchase_cost is normally inherited from Product.purchase_price at
+    intake time; see BulkIntakeSerializer."""
 
     CONDITION_NEW = "new"
     CONDITION_OPEN_BOX = "open_box"
@@ -150,15 +168,36 @@ class StockUnit(TenantAwareModel):
         return f"{self.sku} [{self.imei_serial}]"
 
 
-# Stock Warranty details
-# class StockWarranty(TenantAwareModel):
-    # warrant_id # Unique warranty ID for the stock unit in the tanent
-    # warranty_type # Warranty type (i.e. Manufacturer, Extended, etc.)
-    # duration_months # Warranty duration in months
-    # coverage # Warranty coverage details (i.e. Parts, Labor, etc.)
-    # terms # Warranty terms and conditions (i.e. "1 year warranty for manufacturing defects only")
-    # is_active # Whether the product is active (i.e. True/False)
-    # created_by # Who created this into the app (EMployee or Admin / Inserted by)
-    # updated_by # Who updated this into the app (EMployee or Admin / updated by)
-    # deleted_at # When this product was deleted (soft delete)
-    # deleted_by # Who deleted this product (soft delete)
+class StockWarranty(TenantAwareModel, SoftDeleteModel):
+    """A structured warranty policy attached to a physical stock unit —
+    richer than StockUnit.warranty_expiry (a bare date). A unit can carry
+    more than one of these over time (e.g. original + a later extended
+    warranty purchase)."""
+
+    WARRANTY_MANUFACTURER = "manufacturer"
+    WARRANTY_EXTENDED = "extended"
+    WARRANTY_TYPE_CHOICES = [
+        (WARRANTY_MANUFACTURER, "Manufacturer"),
+        (WARRANTY_EXTENDED, "Extended"),
+    ]
+
+    stock_unit = models.ForeignKey(StockUnit, on_delete=models.CASCADE, related_name="warranties")
+    warrant_id = models.CharField(max_length=64, blank=True, default="")
+    warranty_type = models.CharField(
+        max_length=20, choices=WARRANTY_TYPE_CHOICES, default=WARRANTY_MANUFACTURER
+    )
+    duration_months = models.PositiveIntegerField(null=True, blank=True)
+    coverage = models.TextField(blank=True, default="")
+    terms = models.TextField(blank=True, default="")
+    is_active = models.BooleanField(default=True)
+    deleted_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="+",
+    )
+
+    class Meta:
+        verbose_name_plural = "stock warranties"
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.warranty_type} warranty for {self.stock_unit.imei_serial}"

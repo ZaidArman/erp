@@ -1,17 +1,19 @@
-from rest_framework import serializers, viewsets
-from rest_framework.exceptions import PermissionDenied
+from rest_framework import serializers
 
 from apps.accounts.permissions import IsAdmin, IsAdminOrReadOnlyEmployee
-from apps.core.audit import log_action
+from apps.core.viewsets import TenantAwareViewSet
 
 from .models import Branch
 from .serializers import BranchSerializer
 
 
-class BranchViewSet(viewsets.ModelViewSet):
+class BranchViewSet(TenantAwareViewSet):
     """Branches for the current tenant. Admin-only writes; creation is
-    gated by Tenant.max_branches (PRD: plan limit enforced automatically)."""
+    gated by Tenant.max_branches (PRD: plan limit enforced automatically).
+    Inherits tenant filtering, audit logging, and soft-delete from
+    TenantAwareViewSet."""
 
+    queryset = Branch.objects.all().order_by("id")
     serializer_class = BranchSerializer
 
     def get_permissions(self):
@@ -20,15 +22,6 @@ class BranchViewSet(viewsets.ModelViewSet):
         if self.action in ("list", "retrieve"):
             return [IsAdminOrReadOnlyEmployee()]
         return [IsAdmin()]
-
-    def get_tenant(self):
-        tenant = getattr(self.request, "tenant", None)
-        if tenant is None:
-            raise PermissionDenied("No shop context.")
-        return tenant
-
-    def get_queryset(self):
-        return Branch.objects.filter(tenant=self.get_tenant()).order_by("id")
 
     def perform_create(self, serializer):
         tenant = self.get_tenant()
@@ -42,5 +35,4 @@ class BranchViewSet(viewsets.ModelViewSet):
                     )
                 }
             )
-        instance = serializer.save(tenant=tenant)
-        log_action(self.request, "create", instance)
+        super().perform_create(serializer)

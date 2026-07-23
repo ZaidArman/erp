@@ -118,6 +118,14 @@ button.small { padding: .3rem .6rem; font-size: .78rem; }
 .modal-box p { font-size: .9rem; color: #3d4552; margin-bottom: 1.2rem; line-height: 1.4; }
 .modal-box button { padding: .5rem 1.8rem; }
 
+.modal-box-form {
+  width: 420px; max-width: 92vw; max-height: 85vh; overflow-y: auto;
+  text-align: left;
+}
+.modal-box-form h3 { text-align: center; }
+.modal-form-actions { display: flex; justify-content: flex-end; gap: .6rem; margin-top: .4rem; }
+.modal-form-actions button { padding: .5rem 1.2rem; }
+
 /* ---- Phase 3: receipt (80mm thermal friendly) ---- */
 .receipt { background: #fff; width: 300px; padding: 14px 16px; font-family: "Courier New", monospace; font-size: 12px; color: #000; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,.06); }
 .r-center { text-align: center; }

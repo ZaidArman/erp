@@ -7,7 +7,7 @@ export default function StockIntake() {
   const [suppliers, setSuppliers] = useState([]);
   const [form, setForm] = useState({
     sku: "", branch: "", supplier: "", condition: "new",
-    purchase_cost: "", warranty_expiry: "", imeis: "",
+    warranty_expiry: "", imeis: "",
   });
   const [error, setError] = useState("");
   const [ok, setOk] = useState("");
@@ -21,14 +21,15 @@ export default function StockIntake() {
     api.get("/inventory/suppliers/").then((res) => setSuppliers(res.data.results));
   }, []);
 
+  const selectedSku = skus.find((s) => String(s.id) === String(form.sku));
+
   const submit = async (e) => {
     e.preventDefault();
     setError(""); setOk("");
     const imeis = form.imeis.split(/[\n,]+/).map((s) => s.trim()).filter(Boolean);
     try {
       const payload = {
-        sku: form.sku, branch: form.branch, condition: form.condition,
-        purchase_cost: form.purchase_cost, imeis,
+        sku: form.sku, branch: form.branch, condition: form.condition, imeis,
       };
       if (form.supplier) payload.supplier = form.supplier;
       if (form.warranty_expiry) payload.warranty_expiry = form.warranty_expiry;
@@ -71,12 +72,20 @@ export default function StockIntake() {
                 <option value="used">Used</option>
               </select></div>
             <div className="field"><label>Purchase cost (per unit)</label>
-              <input type="number" min="0.01" step="0.01" value={form.purchase_cost}
-                onChange={(e) => setForm({ ...form, purchase_cost: e.target.value })} required /></div>
+              <input
+                value={selectedSku?.product_purchase_price ?? ""}
+                placeholder={selectedSku ? "Not set on product" : "Select a SKU"}
+                disabled
+              /></div>
             <div className="field"><label>Warranty expiry (optional)</label>
               <input type="date" value={form.warranty_expiry}
                 onChange={(e) => setForm({ ...form, warranty_expiry: e.target.value })} /></div>
           </div>
+          {selectedSku && selectedSku.product_purchase_price == null && (
+            <p style={{ fontSize: ".8rem", color: "#a32d2d", marginTop: "-.4rem" }}>
+              This product has no purchase price set yet — set it on the Products page first.
+            </p>
+          )}
           <div className="field">
             <label>IMEIs / serial numbers — one per line (or comma-separated)</label>
             <textarea

@@ -1,6 +1,7 @@
 """Core abstractions: TenantAwareModel and AuditLog."""
 from django.conf import settings
 from django.db import models
+from django.utils import timezone
 
 
 class TenantAwareModel(models.Model):
@@ -17,6 +18,35 @@ class TenantAwareModel(models.Model):
 
     class Meta:
         abstract = True
+
+
+class SoftDeleteManager(models.Manager):
+    """Default manager: excludes soft-deleted rows everywhere (list views,
+    dropdowns, FK validation) without any per-view code."""
+
+    def get_queryset(self):
+        return super().get_queryset().filter(deleted_at__isnull=True)
+
+
+class SoftDeleteModel(models.Model):
+    """Opt-in soft delete: `deleted_at` set instead of a real row delete.
+    Models that also want a `deleted_by` column add it themselves (not every
+    soft-deletable model in this app tracks who deleted it)."""
+
+    deleted_at = models.DateTimeField(null=True, blank=True)
+
+    objects = SoftDeleteManager()
+    all_objects = models.Manager()  # includes soft-deleted rows (admin/debug only)
+
+    class Meta:
+        abstract = True
+
+    def soft_delete(self):
+        self.deleted_at = timezone.now()
+        fields = ["deleted_at"]
+        if hasattr(self, "deleted_by_id"):
+            fields.append("deleted_by")
+        self.save(update_fields=fields)
 
 
 class AuditLog(models.Model):

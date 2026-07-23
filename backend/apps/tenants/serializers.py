@@ -12,4 +12,9 @@ class TenantSerializer(serializers.ModelSerializer):
 class BranchSerializer(serializers.ModelSerializer):
     class Meta:
         model = Branch
-        fields = ["id", "name", "address", "is_active", "created_at"]
+        fields = [
+            "id", "name", "address", "is_active", "created_at",
+            "branch_code", "email", "branch_phone_number", "branch_city", "branch_province",
+            "deleted_at",
+        ]
+        read_only_fields = ["deleted_at"]

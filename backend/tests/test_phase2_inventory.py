@@ -208,3 +208,134 @@ class TestAuditLog:
     def test_forbidden_write_leaves_no_audit_row(self, tenant_a, client_employee_a):
         client_employee_a.post("/api/inventory/categories/", {"name": "Rogue"})
         assert AuditLog.objects.count() == 0
+
+
+class TestProductOwnedPricing:
+    """Product.selling_price / purchase_price are now the single place a
+    shop enters price — SKU.sell_price and StockUnit.purchase_cost still
+    exist (checkout/finance depend on them) but auto-inherit when omitted."""
+
+    def test_sku_without_sell_price_inherits_product_selling_price(
+        self, tenant_a, client_admin_a
+    ):
+        category = Category.objects.create(tenant=tenant_a, name="Air Conditioners")
+        brand = Brand.objects.create(tenant=tenant_a, name="Haier", category=category)
+        product = Product.objects.create(
+            tenant=tenant_a, category=category, brand=brand, name="Haier 1.5 Ton",
+            selling_price=95000,
+        )
+        res = client_admin_a.post(
+            "/api/inventory/skus/",
+            {"product": product.id, "variant_name": "Standard"},
+        )
+        assert res.status_code == 201
+        assert res.json()["sell_price"] == "95000.00"
+
+    def test_sku_without_sell_price_and_no_product_price_rejected(
+        self, tenant_a, client_admin_a
+    ):
+        category = Category.objects.create(tenant=tenant_a, name="Fridges")
+        brand = Brand.objects.create(tenant=tenant_a, name="Dawlance", category=category)
+        product = Product.objects.create(
+            tenant=tenant_a, category=category, brand=brand, name="Dawlance 260L"
+        )
+        res = client_admin_a.post(
+            "/api/inventory/skus/",
+            {"product": product.id, "variant_name": "Standard"},
+        )
+        assert res.status_code == 400
+        assert "sell_price" in res.json()
+
+    def test_explicit_sell_price_still_wins(self, tenant_a, client_admin_a):
+        category = Category.objects.create(tenant=tenant_a, name="Mobiles")
+        brand = Brand.objects.create(tenant=tenant_a, name="Apple", category=category)
+        product = Product.objects.create(
+            tenant=tenant_a, category=category, brand=brand, name="iPhone 15 Pro",
+            selling_price=452000,
+        )
+        res = client_admin_a.post(
+            "/api/inventory/skus/",
+            {"product": product.id, "variant_name": "512GB", "sell_price": "520000.00"},
+        )
+        assert res.status_code == 201
+        assert res.json()["sell_price"] == "520000.00"
+
+    def test_bulk_intake_without_purchase_cost_inherits_product_purchase_price(
+        self, tenant_a, branch_a, client_admin_a
+    ):
+        category = Category.objects.create(tenant=tenant_a, name="Air Conditioners")
+        brand = Brand.objects.create(tenant=tenant_a, name="Haier", category=category)
+        product = Product.objects.create(
+            tenant=tenant_a, category=category, brand=brand, name="Haier 1.5 Ton",
+            selling_price=95000, purchase_price=80000,
+        )
+        sku = SKU.objects.create(
+            tenant=tenant_a, product=product, variant_name="Standard", sell_price=95000,
+        )
+        res = client_admin_a.post(
+            "/api/inventory/stock-units/bulk-intake/",
+            {"sku": sku.id, "branch": branch_a.id, "imeis": ["AC-1", "AC-2"]},
+            format="json",
+        )
+        assert res.status_code == 201
+        assert all(u["purchase_cost"] == "80000.00" for u in res.json())
+
+    def test_bulk_intake_without_purchase_cost_and_no_product_price_rejected(
+        self, tenant_a, branch_a, client_admin_a
+    ):
+        category = Category.objects.create(tenant=tenant_a, name="Fridges")
+        brand = Brand.objects.create(tenant=tenant_a, name="Dawlance", category=category)
+        product = Product.objects.create(
+            tenant=tenant_a, category=category, brand=brand, name="Dawlance 260L",
+            selling_price=50000,
+        )
+        sku = SKU.objects.create(
+            tenant=tenant_a, product=product, variant_name="Standard", sell_price=50000,
+        )
+        res = client_admin_a.post(
+            "/api/inventory/stock-units/bulk-intake/",
+            {"sku": sku.id, "branch": branch_a.id, "imeis": ["FR-1"]},
+            format="json",
+        )
+        assert res.status_code == 400
+        assert "purchase_cost" in res.json()
+
+    def test_profit_margin_auto_computed(self, tenant_a):
+        category = Category.objects.create(tenant=tenant_a, name="Mobiles")
+        brand = Brand.objects.create(tenant=tenant_a, name="Apple", category=category)
+        product = Product.objects.create(
+            tenant=tenant_a, category=category, brand=brand, name="iPhone 15 Pro",
+            selling_price=452000, cost_price=400000,
+        )
+        assert product.profit_margin == 52000
+
+
+class TestSoftDelete:
+    def test_deleted_category_hidden_but_blocks_duplicate_name(
+        self, tenant_a, client_admin_a
+    ):
+        created = client_admin_a.post("/api/inventory/categories/", {"name": "Mobiles"}).json()
+        client_admin_a.delete(f"/api/inventory/categories/{created['id']}/")
+
+        listed = client_admin_a.get("/api/inventory/categories/").json()
+        assert all(c["id"] != created["id"] for c in listed["results"])
+
+        res = client_admin_a.post("/api/inventory/categories/", {"name": "Mobiles"})
+        assert res.status_code == 400
+        assert "already exists" in res.json()["name"]
+
+        category = Category.all_objects.get(id=created["id"])
+        assert category.deleted_at is not None
+
+    def test_deleted_brand_records_deleted_by(self, tenant_a, client_admin_a):
+        category = client_admin_a.post(
+            "/api/inventory/categories/", {"name": "Mobiles"}
+        ).json()
+        brand = client_admin_a.post(
+            "/api/inventory/brands/", {"name": "Apple", "category": category["id"]}
+        ).json()
+        client_admin_a.delete(f"/api/inventory/brands/{brand['id']}/")
+
+        deleted_brand = Brand.all_objects.get(id=brand["id"])
+        assert deleted_brand.deleted_at is not None
+        assert deleted_brand.deleted_by is not None

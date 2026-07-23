@@ -12,7 +12,7 @@ from apps.core.audit import log_action
 from apps.core.models import AuditLog
 from apps.core.viewsets import TenantAwareViewSet
 
-from .models import SKU, Brand, Category, Product, StockUnit, Supplier
+from .models import SKU, Brand, Category, Product, StockUnit, StockWarranty, Supplier
 from .serializers import (
     BrandSerializer,
     BulkIntakeSerializer,
@@ -21,6 +21,7 @@ from .serializers import (
     ProductSerializer,
     SKUSerializer,
     StockUnitSerializer,
+    StockWarrantySerializer,
     SupplierSerializer,
 )
 
@@ -130,6 +131,14 @@ class StockUnitViewSet(TenantAwareViewSet):
         data = serializer.validated_data
         tenant = self.get_tenant()
 
+        purchase_cost = data.get("purchase_cost")
+        if purchase_cost is None:
+            purchase_cost = data["sku"].product.purchase_price
+            if purchase_cost is None:
+                raise drf_serializers.ValidationError(
+                    {"purchase_cost": "Set a purchase price on the product first, or provide one here."}
+                )
+
         existing = StockUnit.objects.filter(
             tenant=tenant, imei_serial__in=data["imeis"]
         ).values_list("imei_serial", flat=True)
@@ -148,7 +157,7 @@ class StockUnitViewSet(TenantAwareViewSet):
                             branch=data["branch"],
                             supplier=data.get("supplier"),
                             condition=data["condition"],
-                            purchase_cost=data["purchase_cost"],
+                            purchase_cost=purchase_cost,
                             warranty_expiry=data.get("warranty_expiry"),
                             imei_serial=imei,
                         )
@@ -166,6 +175,23 @@ class StockUnitViewSet(TenantAwareViewSet):
         return Response(
             StockUnitSerializer(units, many=True).data, status=status.HTTP_201_CREATED
         )
+
+
+class StockWarrantyViewSet(TenantAwareViewSet):
+    queryset = StockWarranty.objects.select_related("stock_unit")
+    serializer_class = StockWarrantySerializer
+
+    def get_permissions(self):
+        if self.action in ("list", "retrieve"):
+            return [IsAdminOrReadOnlyEmployee()]
+        return [MANAGE_INVENTORY()]
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        stock_unit = self.request.query_params.get("stock_unit")
+        if stock_unit:
+            qs = qs.filter(stock_unit_id=stock_unit)
+        return qs
 
 
 class ProductReportPagination(PageNumberPagination):

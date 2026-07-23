@@ -7,6 +7,7 @@ from .views import (
     ProductViewSet,
     SKUViewSet,
     StockUnitViewSet,
+    StockWarrantyViewSet,
     SupplierViewSet,
 )
 
@@ -17,6 +18,7 @@ router.register("suppliers", SupplierViewSet, basename="supplier")
 router.register("products", ProductViewSet, basename="product")
 router.register("skus", SKUViewSet, basename="sku")
 router.register("stock-units", StockUnitViewSet, basename="stockunit")
+router.register("stock-warranties", StockWarrantyViewSet, basename="stockwarranty")
 router.register("product-report", ProductReportViewSet, basename="product-report")
 
 urlpatterns = router.urls
