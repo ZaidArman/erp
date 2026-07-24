@@ -1,5 +1,7 @@
 from rest_framework import serializers
 
+from apps.core.validators import validate_phone_number
+
 from .models import Branch, Tenant
 
 
@@ -18,3 +20,6 @@ class BranchSerializer(serializers.ModelSerializer):
             "deleted_at",
         ]
         read_only_fields = ["deleted_at"]
+
+    def validate_branch_phone_number(self, value):
+        return validate_phone_number(value)

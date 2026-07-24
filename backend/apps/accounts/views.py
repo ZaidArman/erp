@@ -1,11 +1,11 @@
 from rest_framework import serializers, status, viewsets
 from rest_framework.decorators import action, api_view, permission_classes
-from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework_simplejwt.views import TokenObtainPairView
 
 from apps.core.audit import log_action
+from apps.core.viewsets import TenantScopedMixin
 
 from .models import EmployeePermission, User
 from .permissions import HasEmployeePermission, IsAdmin
@@ -27,7 +27,7 @@ def me(request):
     return Response(UserSerializer(request.user).data)
 
 
-class EmployeeViewSet(viewsets.ModelViewSet):
+class EmployeeViewSet(TenantScopedMixin, viewsets.ModelViewSet):
     """Admin manages employees. Employees with can_create_users may create
     (matrix row: Create employee user — Employee: If permitted)."""
 
@@ -37,12 +37,6 @@ class EmployeeViewSet(viewsets.ModelViewSet):
         if self.action in ("list", "retrieve"):
             return [HasEmployeePermission("can_create_users")()]
         return [IsAdmin()]  # set_permissions / update / deactivate: admin only
-
-    def get_tenant(self):
-        tenant = getattr(self.request, "tenant", None)
-        if tenant is None:
-            raise PermissionDenied("No shop context.")
-        return tenant
 
     def get_queryset(self):
         return (

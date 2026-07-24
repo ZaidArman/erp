@@ -112,7 +112,7 @@ class TestCheckoutFailures:
             format="json",
         )
         assert res.status_code == 400
-        assert "not found" in res.json()["detail"].lower()
+        assert "not found" in res.json()["message"].lower()
 
     def test_unit_from_other_branch_is_400(self, tenant_a, branch_a, client_admin_a):
         branch2 = Branch.objects.create(tenant=tenant_a, name="Second")
@@ -123,7 +123,7 @@ class TestCheckoutFailures:
             format="json",
         )
         assert res.status_code == 400
-        assert "branch" in res.json()["detail"].lower()
+        assert "branch" in res.json()["message"].lower()
 
     def test_employee_without_can_use_pos_gets_403(
         self, tenant_a, branch_a, client_employee_a

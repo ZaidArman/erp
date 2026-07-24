@@ -2,6 +2,7 @@ from decimal import Decimal
 from rest_framework import serializers
 
 from apps.core.serializers import TenantPKRelatedField
+from apps.core.validators import validate_phone_number
 from apps.tenants.models import Branch
 
 from .models import SKU, Brand, Category, Product, StockUnit, StockWarranty, Supplier
@@ -42,6 +43,9 @@ class BrandSerializer(serializers.ModelSerializer):
             "created_at", "updated_at", "created_by_name", "updated_by_name",
         ]
         read_only_fields = ["created_at", "updated_at"]
+
+    def validate_supporter_phone_number(self, value):
+        return validate_phone_number(value)
 
 
 class SupplierSerializer(serializers.ModelSerializer):
@@ -155,6 +159,11 @@ class StockUnitSerializer(serializers.ModelSerializer):
             "purchase_cost", "is_sold", "warranty_expiry",
         ]
         read_only_fields = ["is_sold"]
+
+    def validate_purchase_cost(self, value):
+        if value <= 0:
+            raise serializers.ValidationError("Purchase cost must be positive.")
+        return value
 
 
 class ProductReportSerializer(StockUnitSerializer):

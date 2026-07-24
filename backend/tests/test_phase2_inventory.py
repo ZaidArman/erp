@@ -43,7 +43,10 @@ class TestConstraints:
         client_admin_a.post("/api/inventory/categories/", {"name": "Mobiles"})
         res = client_admin_a.post("/api/inventory/categories/", {"name": "Mobiles"})
         assert res.status_code == 400
-        assert "already exists" in res.json()["name"]
+        body = res.json()
+        assert body["success"] is False
+        assert body["error_code"] == "VALIDATION_ERROR"
+        assert "already exists" in body["errors"]["name"][0]
 
     def test_duplicate_imei_same_tenant_rejected(self, catalog_a, tenant_a):
         common = dict(
@@ -244,7 +247,7 @@ class TestProductOwnedPricing:
             {"product": product.id, "variant_name": "Standard"},
         )
         assert res.status_code == 400
-        assert "sell_price" in res.json()
+        assert "sell_price" in res.json()["errors"]
 
     def test_explicit_sell_price_still_wins(self, tenant_a, client_admin_a):
         category = Category.objects.create(tenant=tenant_a, name="Mobiles")
@@ -298,7 +301,7 @@ class TestProductOwnedPricing:
             format="json",
         )
         assert res.status_code == 400
-        assert "purchase_cost" in res.json()
+        assert "purchase_cost" in res.json()["errors"]
 
     def test_profit_margin_auto_computed(self, tenant_a):
         category = Category.objects.create(tenant=tenant_a, name="Mobiles")
@@ -322,7 +325,7 @@ class TestSoftDelete:
 
         res = client_admin_a.post("/api/inventory/categories/", {"name": "Mobiles"})
         assert res.status_code == 400
-        assert "already exists" in res.json()["name"]
+        assert "already exists" in res.json()["errors"]["name"][0]
 
         category = Category.all_objects.get(id=created["id"])
         assert category.deleted_at is not None
@@ -339,3 +342,84 @@ class TestSoftDelete:
         deleted_brand = Brand.all_objects.get(id=brand["id"])
         assert deleted_brand.deleted_at is not None
         assert deleted_brand.deleted_by is not None
+
+
+class TestValidationHardening:
+    """Standardized error envelope, field-accurate conflict messages, the
+    purchase_cost positivity guard, phone format validation, and the
+    DB-level price CheckConstraints."""
+
+    def test_error_envelope_shape_on_validation_failure(self, catalog_a, client_admin_a):
+        res = client_admin_a.post(
+            "/api/inventory/skus/",
+            {"product": catalog_a["product"].id, "variant_name": "Bad", "sell_price": "-5"},
+        )
+        assert res.status_code == 400
+        body = res.json()
+        assert body["success"] is False
+        assert body["error_code"] == "VALIDATION_ERROR"
+        assert isinstance(body["message"], str) and body["message"]
+        assert isinstance(body["errors"], dict)
+        assert isinstance(body["errors"]["sell_price"], list)
+
+    def test_duplicate_imei_via_api_names_the_right_field(self, catalog_a, client_admin_a):
+        client_admin_a.post(
+            "/api/inventory/stock-units/",
+            {
+                "sku": catalog_a["sku"].id, "branch": catalog_a["branch"].id,
+                "imei_serial": "DUPE-1", "condition": "new", "purchase_cost": "100.00",
+            },
+        )
+        res = client_admin_a.post(
+            "/api/inventory/stock-units/",
+            {
+                "sku": catalog_a["sku"].id, "branch": catalog_a["branch"].id,
+                "imei_serial": "DUPE-1", "condition": "new", "purchase_cost": "100.00",
+            },
+        )
+        assert res.status_code == 400
+        errors = res.json()["errors"]
+        assert "imei_serial" in errors
+        assert "already exists" in errors["imei_serial"][0]
+
+    def test_stock_unit_purchase_cost_must_be_positive(self, catalog_a, client_admin_a):
+        res = client_admin_a.post(
+            "/api/inventory/stock-units/",
+            {
+                "sku": catalog_a["sku"].id, "branch": catalog_a["branch"].id,
+                "imei_serial": "NEG-1", "condition": "new", "purchase_cost": "-1.00",
+            },
+        )
+        assert res.status_code == 400
+        assert "purchase_cost" in res.json()["errors"]
+
+    def test_brand_phone_number_format_rejected(self, tenant_a, client_admin_a):
+        category = client_admin_a.post("/api/inventory/categories/", {"name": "Mobiles"}).json()
+        res = client_admin_a.post(
+            "/api/inventory/brands/",
+            {"name": "Apple", "category": category["id"], "supporter_phone_number": "call-me-maybe!"},
+        )
+        assert res.status_code == 400
+        assert "supporter_phone_number" in res.json()["errors"]
+
+    def test_brand_phone_number_valid_format_accepted(self, tenant_a, client_admin_a):
+        category = client_admin_a.post("/api/inventory/categories/", {"name": "Mobiles"}).json()
+        res = client_admin_a.post(
+            "/api/inventory/brands/",
+            {"name": "Apple", "category": category["id"], "supporter_phone_number": "+92 300 1234567"},
+        )
+        assert res.status_code == 201
+
+    def test_negative_sku_sell_price_rejected_at_db_level(self, catalog_a, tenant_a):
+        with pytest.raises(IntegrityError):
+            SKU.objects.create(
+                tenant=tenant_a, product=catalog_a["product"], variant_name="Bad DB row",
+                sell_price=-100,
+            )
+
+    def test_negative_stock_unit_purchase_cost_rejected_at_db_level(self, catalog_a, tenant_a):
+        with pytest.raises(IntegrityError):
+            StockUnit.objects.create(
+                tenant=tenant_a, sku=catalog_a["sku"], branch=catalog_a["branch"],
+                purchase_cost=-1, imei_serial="DB-NEG-1",
+            )

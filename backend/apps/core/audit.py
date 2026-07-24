@@ -5,6 +5,15 @@ from django.db.models.functions import Cast, Coalesce, NullIf
 from .models import AuditLog
 
 
+def _client_ip(request):
+    # Respect a proxy-set forwarded header if present (first hop = the real
+    # client), falling back to the direct connection address.
+    forwarded = request.META.get("HTTP_X_FORWARDED_FOR")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.META.get("REMOTE_ADDR")
+
+
 def log_action(request, action, instance, changes=None):
     tenant = getattr(request, "tenant", None)
     if tenant is None:
@@ -16,6 +25,8 @@ def log_action(request, action, instance, changes=None):
         model_name=instance.__class__.__name__,
         object_id=str(instance.pk),
         changes=changes or {},
+        ip_address=_client_ip(request),
+        request_path=request.path,
     )
 
 

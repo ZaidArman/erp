@@ -68,6 +68,8 @@ class AuditLog(models.Model):
     object_id = models.CharField(max_length=64)
     changes = models.JSONField(default=dict, blank=True)
     timestamp = models.DateTimeField(auto_now_add=True)
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    request_path = models.CharField(max_length=255, blank=True, default="")
 
     class Meta:
         ordering = ["-timestamp"]

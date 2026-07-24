@@ -8,13 +8,14 @@ from django.db import transaction
 from django.utils import timezone
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
-from rest_framework.exceptions import APIException, PermissionDenied
+from rest_framework.exceptions import APIException, PermissionDenied, ValidationError
 from rest_framework.permissions import BasePermission
 from rest_framework.response import Response
 
 from apps.accounts.models import User
 from apps.accounts.permissions import HasEmployeePermission
 from apps.core.audit import log_action
+from apps.core.viewsets import TenantScopedMixin
 from apps.inventory.models import StockUnit
 
 from .models import Receipt, ReceiptCounter, Sale, SaleItem
@@ -40,7 +41,7 @@ class IsShopMember(BasePermission):
         )
 
 
-class SaleViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.GenericViewSet):
+class SaleViewSet(TenantScopedMixin, mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.GenericViewSet):
     """Sales history (read-only) + the checkout action.
 
     Matrix rows enforced here:
@@ -57,12 +58,6 @@ class SaleViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.Gen
         # list/retrieve/mark-printed: any shop member; the queryset itself
         # restricts employees to their own sales (matrix rows).
         return [IsShopMember()]
-
-    def get_tenant(self):
-        tenant = getattr(self.request, "tenant", None)
-        if tenant is None:
-            raise PermissionDenied("No shop context.")
-        return tenant
 
     def get_queryset(self):
         tenant = self.get_tenant()
@@ -111,9 +106,8 @@ class SaleViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.Gen
             if len(units) != len(unit_ids):
                 found = {u.id for u in units}
                 missing = [str(i) for i in unit_ids if i not in found]
-                return Response(
-                    {"detail": f"Unit(s) not found in this shop: {', '.join(missing)}"},
-                    status=status.HTTP_400_BAD_REQUEST,
+                raise ValidationError(
+                    {"detail": f"Unit(s) not found in this shop: {', '.join(missing)}"}
                 )
 
             already_sold = [u.imei_serial for u in units if u.is_sold]
@@ -122,9 +116,8 @@ class SaleViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.Gen
 
             wrong_branch = [u.imei_serial for u in units if u.branch_id != branch.id]
             if wrong_branch:
-                return Response(
-                    {"detail": f"Unit(s) belong to another branch: {', '.join(wrong_branch)}"},
-                    status=status.HTTP_400_BAD_REQUEST,
+                raise ValidationError(
+                    {"detail": f"Unit(s) belong to another branch: {', '.join(wrong_branch)}"}
                 )
 
             # Server-side total from live SKU prices, snapshotted per item.

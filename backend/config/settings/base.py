@@ -82,6 +82,7 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": ("rest_framework.permissions.IsAuthenticated",),
     "DEFAULT_PAGINATION_CLASS": "apps.core.pagination.StandardPagination",
     "PAGE_SIZE": 50,
+    "EXCEPTION_HANDLER": "apps.core.exceptions.standard_exception_handler",
 }
 
 SIMPLE_JWT = {

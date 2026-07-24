@@ -101,6 +101,20 @@ class Product(TenantAwareModel, SoftDeleteModel):
     class Meta:
         unique_together = ("tenant", "name")
         ordering = ["name"]
+        constraints = [
+            models.CheckConstraint(
+                check=models.Q(purchase_price__isnull=True) | models.Q(purchase_price__gte=0),
+                name="product_purchase_price_non_negative",
+            ),
+            models.CheckConstraint(
+                check=models.Q(cost_price__isnull=True) | models.Q(cost_price__gte=0),
+                name="product_cost_price_non_negative",
+            ),
+            models.CheckConstraint(
+                check=models.Q(selling_price__isnull=True) | models.Q(selling_price__gte=0),
+                name="product_selling_price_non_negative",
+            ),
+        ]
 
     def __str__(self):
         return self.name
@@ -128,6 +142,9 @@ class SKU(TenantAwareModel):
         verbose_name = "SKU"
         verbose_name_plural = "SKUs"
         ordering = ["product__name", "variant_name"]
+        constraints = [
+            models.CheckConstraint(check=models.Q(sell_price__gt=0), name="sku_sell_price_positive"),
+        ]
 
     def __str__(self):
         return f"{self.product.name} — {self.variant_name}"
@@ -163,6 +180,9 @@ class StockUnit(TenantAwareModel):
     class Meta:
         unique_together = ("tenant", "imei_serial")  # IMEI unique per tenant (PRD 3.2)
         ordering = ["-created_at"]
+        constraints = [
+            models.CheckConstraint(check=models.Q(purchase_cost__gt=0), name="stockunit_purchase_cost_positive"),
+        ]
 
     def __str__(self):
         return f"{self.sku} [{self.imei_serial}]"
