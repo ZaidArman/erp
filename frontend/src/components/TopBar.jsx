@@ -9,7 +9,7 @@ import useClickOutside from "../hooks/useClickOutside";
 
 const ROUTE_TITLES = {
   "/": ["Dashboard"],
-  "/products-list": ["Products"],
+  "/products-list": ["Inventory", "Products"],
   "/pos": ["Sales", "Point of sale"],
   "/loans": ["Sales", "Loan"],
   "/sales": ["Sales", "Sales history"],

@@ -91,12 +91,11 @@ function Layout({ children }) {
           <NavLink to="/" end className="nav-link" title="Dashboard">
             <span className="nav-icon"><LayoutDashboard size={17} /></span><span className="nav-text">Dashboard</span>
           </NavLink>
-          <NavLink to="/products-list" className="nav-link" title="Products">
-            <span className="nav-icon"><TableProperties size={17} /></span><span className="nav-text">Products</span>
-          </NavLink>
-
           {canInventory && (
             <NavGroup title="Inventory" collapsed={collapsed}>
+              <NavLink to="/products-list" className="nav-link" title="Products">
+                <span className="nav-icon"><TableProperties size={17} /></span><span className="nav-text">Products</span>
+              </NavLink>
               <NavLink to="/categories" className="nav-link" title="Categories">
                 <span className="nav-icon"><Tags size={17} /></span><span className="nav-text">Categories</span>
               </NavLink>
