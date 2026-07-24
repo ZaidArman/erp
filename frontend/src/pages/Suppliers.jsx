@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ChevronDown, Pencil, Trash2 } from "lucide-react";
+import { ChevronDown, Eye, Pencil, Plus, Trash2 } from "lucide-react";
 import { api, errorText, errorTitle } from "../api";
+import DetailModal from "../components/DetailModal";
 import Modal from "../components/Modal";
 import Pagination from "../components/Pagination";
 import useClickOutside from "../hooks/useClickOutside";
@@ -106,6 +107,7 @@ export default function Suppliers() {
   const [editingId, setEditingId] = useState(null);
   const [saving, setSaving] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [viewing, setViewing] = useState(null);
 
   const load = useCallback(() => {
     api.get(`/inventory/suppliers/?page=${page}&page_size=${pageSize}`).then((res) => {
@@ -302,6 +304,15 @@ export default function Suppliers() {
     setCatalogError("");
     ensureProductsLoaded();
     setShowAddItem(true);
+  };
+
+  // From the Suppliers tab's "+" action — jump to the Catalog tab with this
+  // supplier preselected and the add-item modal already open.
+  const goToCatalogAddItem = (supplier) => {
+    setAllSuppliers((prev) => (prev.some((s) => s.id === supplier.id) ? prev : [supplier, ...prev]));
+    setSelectedSupplierId(String(supplier.id));
+    setTab("catalog");
+    openAddItem();
   };
 
   const submitItem = async (e) => {
@@ -508,8 +519,14 @@ export default function Suppliers() {
                       })}
                       <td>
                         <div style={{ display: "flex", gap: ".4rem", justifyContent: "center" }}>
+                          <button className="icon-btn" title="View supplier" aria-label="View supplier" onClick={() => setViewing(r)}>
+                            <Eye size={15} />
+                          </button>
                           <button className="icon-btn" title="Edit supplier" aria-label="Edit supplier" onClick={() => openEdit(r.raw)}>
                             <Pencil size={15} />
+                          </button>
+                          <button className="icon-btn" title="Add catalog item" aria-label="Add catalog item" onClick={() => goToCatalogAddItem(r.raw)}>
+                            <Plus size={15} />
                           </button>
                           <button className="icon-btn icon-btn-danger" title="Delete supplier" aria-label="Delete supplier" onClick={() => remove(r.id)}>
                             <Trash2 size={15} />
@@ -590,6 +607,29 @@ export default function Suppliers() {
                 </form>
               </div>
             </div>
+          )}
+
+          {viewing && (
+            <DetailModal
+              title={viewing.name}
+              subtitle={viewing.code}
+              onClose={() => setViewing(null)}
+              fields={[
+                { label: "Contact", value: viewing.contact },
+                { label: "Phone", value: viewing.phone },
+                { label: "Email", value: viewing.email },
+                { label: "City", value: viewing.city },
+                { label: "Country", value: viewing.country },
+                { label: "License no.", value: viewing.license_no },
+                { label: "Tax no.", value: viewing.tax_no },
+                { label: "NTN", value: viewing.ntn },
+                { label: "Bank account", value: viewing.bank_account },
+                { label: "Payment terms", value: viewing.payment_terms },
+                { label: "Credit limit", value: viewing.credit_limit },
+                { label: "Status", value: viewing.status },
+                { label: "Created", value: viewing.created_at },
+              ]}
+            />
           )}
         </>
       ) : (

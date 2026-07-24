@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Layers, Pencil, Trash2 } from "lucide-react";
+import { Eye, Layers, Pencil, Plus, Trash2 } from "lucide-react";
 import { api, errorText } from "../api";
 import Brands from "./Brands";
+import DetailModal from "../components/DetailModal";
 import Pagination from "../components/Pagination";
 
 const COLUMNS = [
@@ -119,6 +120,16 @@ export default function ProductsReport() {
   const [sAttrs, setSAttrs] = useState({});
   const [skuError, setSkuError] = useState("");
 
+  const [viewing, setViewing] = useState(null);
+
+  const [showStockModal, setShowStockModal] = useState(false);
+  const [stockProduct, setStockProduct] = useState(null);
+  const [stockSkus, setStockSkus] = useState([]);
+  const [branchesList, setBranchesList] = useState([]);
+  const [stockForm, setStockForm] = useState({ sku: "", branch: "", condition: "new", imeis: "" });
+  const [stockError, setStockError] = useState("");
+  const [stockSaving, setStockSaving] = useState(false);
+
   const queryParams = useMemo(() => {
     const params = new URLSearchParams();
     params.set("page", String(page));
@@ -206,6 +217,43 @@ export default function ProductsReport() {
       selling_price: p.selling_price ?? "",
     });
     setShowProductModal(true);
+  };
+
+  const ensureBranchesLoaded = () => {
+    if (branchesList.length === 0) {
+      api.get("/tenants/branches/").then((res) => setBranchesList(res.data.results)).catch(() => setBranchesList([]));
+    }
+  };
+
+  const openAddStock = async (productId, productName) => {
+    setStockError("");
+    setStockForm({ sku: "", branch: "", condition: "new", imeis: "" });
+    ensureBranchesLoaded();
+    const res = await api.get(`/inventory/skus/?product=${productId}`);
+    setStockProduct({ id: productId, name: productName });
+    setStockSkus(res.data.results);
+    if (res.data.results.length === 1) {
+      setStockForm((f) => ({ ...f, sku: String(res.data.results[0].id) }));
+    }
+    setShowStockModal(true);
+  };
+
+  const submitStock = async (e) => {
+    e.preventDefault();
+    setStockError("");
+    setStockSaving(true);
+    const imeis = stockForm.imeis.split(/[\n,]+/).map((s) => s.trim()).filter(Boolean);
+    try {
+      await api.post("/inventory/stock-units/bulk-intake/", {
+        sku: stockForm.sku, branch: stockForm.branch, condition: stockForm.condition, imeis,
+      });
+      setShowStockModal(false);
+      load();
+    } catch (err) {
+      setStockError(errorText(err));
+    } finally {
+      setStockSaving(false);
+    }
   };
 
   const deleteProduct = async (productId) => {
@@ -381,11 +429,11 @@ export default function ProductsReport() {
                         <div style={{ display: "flex", gap: ".4rem", justifyContent: "center" }}>
                           <button
                             className="icon-btn"
-                            title="Manage SKUs"
-                            aria-label="Manage SKUs"
-                            onClick={() => openManageSkus(r.product_id)}
+                            title="View product"
+                            aria-label="View product"
+                            onClick={() => setViewing(r)}
                           >
-                            <Layers size={15} />
+                            <Eye size={15} />
                           </button>
                           <button
                             className="icon-btn"
@@ -394,6 +442,22 @@ export default function ProductsReport() {
                             onClick={() => openEditProduct(r.product_id)}
                           >
                             <Pencil size={15} />
+                          </button>
+                          <button
+                            className="icon-btn"
+                            title="Manage SKUs"
+                            aria-label="Manage SKUs"
+                            onClick={() => openManageSkus(r.product_id)}
+                          >
+                            <Layers size={15} />
+                          </button>
+                          <button
+                            className="icon-btn"
+                            title="Add stock"
+                            aria-label="Add stock"
+                            onClick={() => openAddStock(r.product_id, r.product_name)}
+                          >
+                            <Plus size={15} />
                           </button>
                           <button
                             className="icon-btn icon-btn-danger"
@@ -577,6 +641,90 @@ export default function ProductsReport() {
             <div className="modal-form-actions">
               <button type="button" className="ghost" onClick={() => setShowSkuModal(false)}>Close</button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {viewing && (
+        <DetailModal
+          title={viewing.product_name}
+          subtitle={`${viewing.brand_name} — ${viewing.category_name}`}
+          onClose={() => setViewing(null)}
+          fields={[
+            { label: "Model number", value: viewing.model_number },
+            { label: "Product code", value: viewing.product_code },
+            { label: "Barcode", value: viewing.barcode },
+            { label: "Color", value: viewing.product_color },
+            { label: "Selling price", value: viewing.selling_price },
+            { label: "Cost price", value: viewing.cost_price },
+            { label: "Purchase price", value: viewing.purchase_price },
+            { label: "Profit margin", value: viewing.profit_margin },
+            { label: "Min stock", value: viewing.minimum_stock },
+            { label: "Max stock", value: viewing.maximum_stock },
+            { label: "Warranty required", value: viewing.warranty_required },
+            { label: "Warranty period (mo)", value: viewing.warranty_period },
+            { label: "Warranty terms", value: viewing.warranty_terms },
+            { label: "Status", value: viewing.product_is_active },
+            { label: "Created", value: viewing.created_at },
+            { label: "Created by", value: viewing.created_by_name },
+          ]}
+        />
+      )}
+
+      {showStockModal && stockProduct && (
+        <div className="modal-overlay" onClick={() => setShowStockModal(false)}>
+          <div className="modal-box modal-box-form" onClick={(e) => e.stopPropagation()}>
+            <h3>Add Stock — {stockProduct.name}</h3>
+            {stockError && <div className="error">{stockError}</div>}
+            {stockSkus.length === 0 ? (
+              <p style={{ fontSize: ".85rem", color: "var(--text-secondary)" }}>
+                This product has no SKU variants yet — add one via "Manage SKUs" first.
+              </p>
+            ) : (
+              <form onSubmit={submitStock}>
+                <div className="row">
+                  {stockSkus.length > 1 && (
+                    <div className="field"><label>Variant</label>
+                      <select value={stockForm.sku} onChange={(e) => setStockForm({ ...stockForm, sku: e.target.value })} required>
+                        <option value="">Select…</option>
+                        {stockSkus.map((s) => <option key={s.id} value={s.id}>{s.variant_name}</option>)}
+                      </select></div>
+                  )}
+                  <div className="field"><label>Branch</label>
+                    <select value={stockForm.branch} onChange={(e) => setStockForm({ ...stockForm, branch: e.target.value })} required>
+                      <option value="">Select…</option>
+                      {branchesList.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+                    </select></div>
+                  <div className="field"><label>Condition</label>
+                    <select value={stockForm.condition} onChange={(e) => setStockForm({ ...stockForm, condition: e.target.value })}>
+                      <option value="new">New</option>
+                      <option value="open_box">Open box</option>
+                      <option value="refurbished">Refurbished</option>
+                      <option value="used">Used</option>
+                    </select></div>
+                </div>
+                <div className="field">
+                  <label>IMEIs / serial numbers — one per line (or comma-separated)</label>
+                  <textarea
+                    rows={5}
+                    style={{ width: "100%", padding: ".5rem .6rem", border: "1px solid var(--border-strong)", borderRadius: 6, fontFamily: "monospace" }}
+                    value={stockForm.imeis}
+                    onChange={(e) => setStockForm({ ...stockForm, imeis: e.target.value })}
+                    placeholder={"358743110912345\n358743110912346"}
+                    required
+                  />
+                </div>
+                <div className="modal-form-actions">
+                  <button type="button" className="ghost" onClick={() => setShowStockModal(false)}>Cancel</button>
+                  <button type="submit" disabled={stockSaving}>{stockSaving ? "Saving…" : "Receive into stock"}</button>
+                </div>
+              </form>
+            )}
+            {stockSkus.length === 0 && (
+              <div className="modal-form-actions">
+                <button type="button" className="ghost" onClick={() => setShowStockModal(false)}>Close</button>
+              </div>
+            )}
           </div>
         </div>
       )}

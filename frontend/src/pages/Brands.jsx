@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Pencil, Trash2 } from "lucide-react";
+import { Eye, Pencil, Plus, Trash2 } from "lucide-react";
 import { api, errorText, errorTitle } from "../api";
+import DetailModal from "../components/DetailModal";
 import Modal from "../components/Modal";
 import Pagination from "../components/Pagination";
 
 const emptyForm = { name: "", category: "", description: "", supporter_phone_number: "" };
+const emptyProductForm = () => ({ name: "", description: "" });
 
 const COLUMNS = [
   { key: "id", label: "ID" },
@@ -44,6 +46,13 @@ export default function Brands() {
   const [exporting, setExporting] = useState(false);
   const [search, setSearch] = useState("");
   const [colFilters, setColFilters] = useState({});
+
+  const [viewing, setViewing] = useState(null);
+
+  const [addProductFor, setAddProductFor] = useState(null);
+  const [productForm, setProductForm] = useState(emptyProductForm());
+  const [productError, setProductError] = useState("");
+  const [productSaving, setProductSaving] = useState(false);
 
   const load = useCallback(() => {
     api.get(`/inventory/brands/?page=${page}&page_size=${pageSize}`).then((res) => {
@@ -139,6 +148,23 @@ export default function Brands() {
     if (!confirm("Delete this brand?")) return;
     try { await api.delete(`/inventory/brands/${id}/`); load(); }
     catch (err) { setError(errorText(err)); }
+  };
+
+  const openAddProduct = (brand) => {
+    setAddProductFor(brand);
+    setProductForm(emptyProductForm());
+    setProductError("");
+  };
+
+  const submitProduct = async (e) => {
+    e.preventDefault();
+    setProductError("");
+    setProductSaving(true);
+    try {
+      await api.post("/inventory/products/", { ...productForm, brand: addProductFor.id });
+      setAddProductFor(null);
+    } catch (err) { setProductError(errorText(err)); }
+    finally { setProductSaving(false); }
   };
 
   const toggleActive = async (brand) => {
@@ -254,11 +280,27 @@ export default function Brands() {
                     <div style={{ display: "flex", gap: ".4rem", justifyContent: "center" }}>
                       <button
                         className="icon-btn"
+                        title="View brand"
+                        aria-label="View brand"
+                        onClick={() => setViewing(r)}
+                      >
+                        <Eye size={15} />
+                      </button>
+                      <button
+                        className="icon-btn"
                         title="Edit brand"
                         aria-label="Edit brand"
                         onClick={() => openEdit(r.raw)}
                       >
                         <Pencil size={15} />
+                      </button>
+                      <button
+                        className="icon-btn"
+                        title="Add product"
+                        aria-label="Add product"
+                        onClick={() => openAddProduct(r.raw)}
+                      >
+                        <Plus size={15} />
                       </button>
                       <button
                         className="icon-btn icon-btn-danger"
@@ -318,6 +360,48 @@ export default function Brands() {
                 <button type="submit" disabled={saving}>
                   {saving ? "Saving…" : editingId ? "Save changes" : "Add brand"}
                 </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {viewing && (
+        <DetailModal
+          title={viewing.name}
+          subtitle={viewing.category_name}
+          onClose={() => setViewing(null)}
+          fields={[
+            { label: "Category", value: viewing.category_name },
+            { label: "Description", value: viewing.description },
+            { label: "Support phone", value: viewing.supporter_phone_number },
+            { label: "Status", value: viewing.status },
+            { label: "Created at", value: viewing.created_at },
+            { label: "Created by", value: viewing.created_by_name },
+            { label: "Updated at", value: viewing.updated_at },
+            { label: "Updated by", value: viewing.updated_by_name },
+          ]}
+        />
+      )}
+
+      {addProductFor && (
+        <div className="modal-overlay" onClick={() => setAddProductFor(null)}>
+          <div className="modal-box modal-box-form" onClick={(e) => e.stopPropagation()}>
+            <h3>Add Product — {addProductFor.name}</h3>
+            {productError && <div className="error">{productError}</div>}
+            <form onSubmit={submitProduct}>
+              <div className="field"><label>Product name</label>
+                <input value={productForm.name} placeholder="e.g. iPhone 15 Pro"
+                  onChange={(e) => setProductForm({ ...productForm, name: e.target.value })} required /></div>
+              <div className="field"><label>Description</label>
+                <input value={productForm.description} placeholder="Optional"
+                  onChange={(e) => setProductForm({ ...productForm, description: e.target.value })} /></div>
+              <p style={{ fontSize: ".8rem", color: "var(--text-tertiary)" }}>
+                More details (pricing, warranty, identity codes) can be added afterwards from the Products page.
+              </p>
+              <div className="modal-form-actions">
+                <button type="button" className="ghost" onClick={() => setAddProductFor(null)}>Cancel</button>
+                <button type="submit" disabled={productSaving}>{productSaving ? "Saving…" : "Add product"}</button>
               </div>
             </form>
           </div>

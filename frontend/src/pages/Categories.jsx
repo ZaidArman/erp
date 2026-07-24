@@ -1,16 +1,13 @@
-import { useCallback, useEffect, useState } from "react";
-import { Pencil, Trash2 } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Eye, Pencil, Plus, Tags, Trash2 } from "lucide-react";
 import { api, errorText, errorTitle } from "../api";
+import DetailModal from "../components/DetailModal";
 import Modal from "../components/Modal";
 import Pagination from "../components/Pagination";
 
-const FIELD_TYPES = [
-  { value: "text", label: "Text" },
-  { value: "number", label: "Number" },
-];
+const emptyBrandForm = () => ({ name: "", description: "", supporter_phone_number: "" });
 
-const emptyField = () => ({ key: "", label: "", type: "text" });
-const emptyForm = () => ({ name: "", description: "", fields: [] });
+const emptyForm = () => ({ name: "", description: "" });
 
 function formatDate(value) {
   if (!value) return "";
@@ -27,7 +24,6 @@ const COLUMNS = [
   { key: "id", label: "ID" },
   { key: "name", label: "Category" },
   { key: "description", label: "Description" },
-  { key: "attribute_schema_text", label: "Custom fields" },
   { key: "status", label: "Status" },
   { key: "created_at", label: "Created at" },
   { key: "created_by_name", label: "Created by" },
@@ -49,6 +45,17 @@ export default function Categories() {
   const [saving, setSaving] = useState(false);
   const [exporting, setExporting] = useState(false);
 
+  const [viewing, setViewing] = useState(null);
+
+  const [addBrandFor, setAddBrandFor] = useState(null);
+  const [brandForm, setBrandForm] = useState(emptyBrandForm());
+  const [brandError, setBrandError] = useState("");
+  const [brandSaving, setBrandSaving] = useState(false);
+
+  const [statusFilter, setStatusFilter] = useState("all"); // active | inactive | all
+  const [search, setSearch] = useState("");
+  const [colFilters, setColFilters] = useState({});
+
   const load = useCallback(() => {
     api.get(`/inventory/categories/?page=${page}&page_size=${pageSize}`).then((res) => {
       setCategories(res.data.results);
@@ -61,11 +68,37 @@ export default function Categories() {
   const pageCount = Math.max(1, Math.ceil(count / pageSize));
   const goToPage = (p) => setPage(Math.min(Math.max(1, p), pageCount));
   const changePageSize = (n) => { setPageSize(n); setPage(1); };
+  const setColFilter = (key, value) => setColFilters((f) => ({ ...f, [key]: value }));
 
-  const addField = () => setForm((f) => ({ ...f, fields: [...f.fields, emptyField()] }));
-  const updateField = (idx, patch) =>
-    setForm((f) => ({ ...f, fields: f.fields.map((row, i) => (i === idx ? { ...row, ...patch } : row)) }));
-  const removeField = (idx) => setForm((f) => ({ ...f, fields: f.fields.filter((_, i) => i !== idx) }));
+  const rows = useMemo(() => {
+    return categories.map((c) => ({
+      id: c.id,
+      name: c.name || "",
+      description: c.description || "",
+      status: c.is_active ? "active" : "inactive",
+      created_at: formatDate(c.created_at),
+      created_by_name: c.created_by_name || "",
+      updated_at: formatDate(c.updated_at),
+      updated_by_name: c.updated_by_name || "",
+      raw: c,
+    }));
+  }, [categories]);
+
+  const filteredRows = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return rows.filter((row) => {
+      if (statusFilter !== "all" && row.status !== statusFilter) return false;
+      if (q) {
+        const hit = COLUMNS.some((c) => String(row[c.key]).toLowerCase().includes(q));
+        if (!hit) return false;
+      }
+      return COLUMNS.every((c) => {
+        const val = colFilters[c.key];
+        if (!val) return true;
+        return String(row[c.key]).toLowerCase().includes(val.trim().toLowerCase());
+      });
+    });
+  }, [rows, search, colFilters, statusFilter]);
 
   const openAdd = () => {
     setEditingId(null);
@@ -79,7 +112,6 @@ export default function Categories() {
     setForm({
       name: category.name || "",
       description: category.description || "",
-      fields: (category.attribute_schema || []).map((f) => ({ ...f })),
     });
     setError("");
     setShowModal(true);
@@ -89,14 +121,7 @@ export default function Categories() {
     e.preventDefault();
     setError("");
     setSaving(true);
-    const attribute_schema = form.fields
-      .filter((f) => f.key.trim())
-      .map((f) => ({
-        key: f.key.trim().toLowerCase().replace(/\s+/g, "_"),
-        label: f.label.trim() || f.key.trim(),
-        type: f.type,
-      }));
-    const payload = { name: form.name, description: form.description, attribute_schema };
+    const payload = { name: form.name, description: form.description };
     try {
       if (editingId) {
         await api.patch(`/inventory/categories/${editingId}/`, payload);
@@ -120,6 +145,24 @@ export default function Categories() {
     } catch (err) { setError(errorText(err)); }
   };
 
+  const openAddBrand = (category) => {
+    setAddBrandFor(category);
+    setBrandForm(emptyBrandForm());
+    setBrandError("");
+  };
+
+  const submitBrand = async (e) => {
+    e.preventDefault();
+    setBrandError("");
+    setBrandSaving(true);
+    try {
+      await api.post("/inventory/brands/", { ...brandForm, category: addBrandFor.id });
+      setSuccess(`Brand added under "${addBrandFor.name}".`);
+      setAddBrandFor(null);
+    } catch (err) { setBrandError(errorText(err)); }
+    finally { setBrandSaving(false); }
+  };
+
   const toggleActive = async (category) => {
     try {
       await api.patch(`/inventory/categories/${category.id}/`, { is_active: !category.is_active });
@@ -141,7 +184,6 @@ export default function Categories() {
         id: c.id,
         name: c.name || "",
         description: c.description || "",
-        attribute_schema_text: (c.attribute_schema || []).map((f) => f.label).join("; "),
         status: c.is_active ? "active" : "inactive",
         created_at: formatDate(c.created_at),
         created_by_name: c.created_by_name || "",
@@ -167,14 +209,60 @@ export default function Categories() {
       <Modal title={errorTitle(error)} message={error} onClose={() => setError("")} />
       <Modal title="Success" message={success} onClose={() => setSuccess("")} />
 
+      <div
+        className="card"
+        style={{
+          display: "flex", justifyContent: "space-between", alignItems: "center",
+          background: "linear-gradient(120deg, var(--brand-700, #1d4ed8), var(--brand-500, #3b82f6))",
+          color: "#fff", border: "none",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: ".9rem" }}>
+          <div style={{
+            width: "2.4rem", height: "2.4rem", borderRadius: "var(--radius-lg)",
+            background: "rgba(255,255,255,.18)", display: "flex", alignItems: "center", justifyContent: "center",
+          }}>
+            <Tags size={19} />
+          </div>
+          <div>
+            <div style={{ fontWeight: 700, fontSize: "1.05rem" }}>Categories</div>
+            <div style={{ fontSize: ".82rem", opacity: .85 }}>Group your products and drive brand/SKU organization</div>
+          </div>
+        </div>
+        <div style={{ background: "rgba(255,255,255,.15)", borderRadius: "var(--radius-md)", padding: ".5rem .9rem", textAlign: "center" }}>
+          <div style={{ fontSize: ".65rem", fontWeight: 700, letterSpacing: ".05em", opacity: .85 }}>TOTAL</div>
+          <div style={{ fontSize: "1.15rem", fontWeight: 700 }}>{count}</div>
+        </div>
+      </div>
+
       <div className="card">
-        <div className="row">
-          <div style={{ flex: 1 }} />
-          <div className="field" style={{ alignSelf: "end", flex: 0, display: "flex", gap: ".6rem" }}>
-            <button onClick={openAdd}>+ Add Category</button>
-            <button className="ghost" onClick={exportCsv} disabled={exporting}>
+        <div className="field" style={{ marginBottom: ".9rem" }}>
+          <label>Global search</label>
+          <input
+            value={search}
+            placeholder="Search by name, description…"
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+        <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", gap: ".6rem" }}>
+          <div style={{ display: "flex", gap: ".4rem" }}>
+            {["active", "inactive", "all"].map((s) => (
+              <button
+                key={s}
+                type="button"
+                className={statusFilter === s ? "" : "ghost"}
+                style={{ whiteSpace: "nowrap" }}
+                onClick={() => setStatusFilter(s)}
+              >
+                {s[0].toUpperCase() + s.slice(1)}
+              </button>
+            ))}
+          </div>
+          <div style={{ display: "flex", gap: ".6rem" }}>
+            <button className="ghost" style={{ whiteSpace: "nowrap" }} onClick={exportCsv} disabled={exporting}>
               {exporting ? "Exporting…" : "Export CSV"}
             </button>
+            <button style={{ whiteSpace: "nowrap" }} onClick={openAdd}>+ Add Category</button>
           </div>
         </div>
       </div>
@@ -187,45 +275,56 @@ export default function Categories() {
                 {COLUMNS.map((c) => <th key={c.key}>{c.label}</th>)}
                 <th>Action</th>
               </tr>
+              <tr>
+                {COLUMNS.map((c) => (
+                  <th key={c.key} className="col-filter">
+                    <input
+                      value={colFilters[c.key] || ""}
+                      placeholder="Filter…"
+                      onChange={(e) => setColFilter(c.key, e.target.value)}
+                    />
+                  </th>
+                ))}
+                <th className="col-filter" />
+              </tr>
             </thead>
             <tbody>
-              {categories.map((c) => (
-                <tr key={c.id}>
-                  <td>{c.id}</td>
-                  <td>{c.name}</td>
-                  <td style={{ color: "var(--text-secondary)" }} title={c.description}>{c.description || "—"}</td>
+              {filteredRows.map((r) => (
+                <tr key={r.id}>
+                  <td>{r.id}</td>
+                  <td>{r.name}</td>
+                  <td style={{ color: "var(--text-secondary)" }} title={r.description}>{r.description || "—"}</td>
                   <td>
-                    {(c.attribute_schema || []).length === 0
-                      ? <span style={{ color: "var(--text-tertiary)" }}>—</span>
-                      : c.attribute_schema.map((f) => (
-                          <span key={f.key} className="badge gray" style={{ marginRight: ".3rem" }}>{f.label}</span>
-                        ))}
-                  </td>
-                  <td>
-                    <button className="ghost small" onClick={() => toggleActive(c)}>
-                      <span className={`badge ${c.is_active ? "green" : "gray"}`}>
-                        {c.is_active ? "active" : "inactive"}
+                    <button className="ghost small" onClick={() => toggleActive(r.raw)}>
+                      <span className={`badge ${r.status === "active" ? "green" : "gray"}`}>
+                        {r.status}
                       </span>
                     </button>
                   </td>
-                  <td>{formatDate(c.created_at)}</td>
-                  <td>{c.created_by_name || "—"}</td>
-                  <td>{formatDate(c.updated_at)}</td>
-                  <td>{c.updated_by_name || "—"}</td>
+                  <td>{r.created_at}</td>
+                  <td>{r.created_by_name || "—"}</td>
+                  <td>{r.updated_at}</td>
+                  <td>{r.updated_by_name || "—"}</td>
                   <td>
                     <div style={{ display: "flex", gap: ".4rem", justifyContent: "center" }}>
-                      <button className="icon-btn" title="Edit category" aria-label="Edit category" onClick={() => openEdit(c)}>
+                      <button className="icon-btn" title="View category" aria-label="View category" onClick={() => setViewing(r.raw)}>
+                        <Eye size={15} />
+                      </button>
+                      <button className="icon-btn" title="Edit category" aria-label="Edit category" onClick={() => openEdit(r.raw)}>
                         <Pencil size={15} />
                       </button>
-                      <button className="icon-btn icon-btn-danger" title="Delete category" aria-label="Delete category" onClick={() => remove(c.id)}>
+                      <button className="icon-btn" title="Add brand" aria-label="Add brand" onClick={() => openAddBrand(r.raw)}>
+                        <Plus size={15} />
+                      </button>
+                      <button className="icon-btn icon-btn-danger" title="Delete category" aria-label="Delete category" onClick={() => remove(r.id)}>
                         <Trash2 size={15} />
                       </button>
                     </div>
                   </td>
                 </tr>
               ))}
-              {categories.length === 0 && (
-                <tr><td colSpan={COLUMNS.length + 1} style={{ color: "var(--text-tertiary)" }}>Nothing yet — add the first category above.</td></tr>
+              {filteredRows.length === 0 && (
+                <tr><td colSpan={COLUMNS.length + 1} style={{ color: "var(--text-tertiary)" }}>No categories match these filters.</td></tr>
               )}
             </tbody>
           </table>
@@ -255,36 +354,50 @@ export default function Categories() {
                     onChange={(e) => setForm({ ...form, description: e.target.value })} /></div>
               </div>
 
-              <label style={{ marginTop: ".6rem" }}>Custom fields for this category's products</label>
-              <p style={{ fontSize: ".85rem", color: "var(--text-tertiary)", marginBottom: ".8rem" }}>
-                e.g. Mobiles → Storage, RAM, Color. AC → Tonnage, Energy rating. Fridge → Capacity (Liters).
-              </p>
-              {form.fields.map((f, idx) => (
-                <div className="row" key={idx}>
-                  <div className="field"><label>Field key</label>
-                    <input value={f.key} placeholder="tonnage"
-                      onChange={(e) => updateField(idx, { key: e.target.value })} /></div>
-                  <div className="field"><label>Display label</label>
-                    <input value={f.label} placeholder="Tonnage"
-                      onChange={(e) => updateField(idx, { label: e.target.value })} /></div>
-                  <div className="field"><label>Type</label>
-                    <select value={f.type} onChange={(e) => updateField(idx, { type: e.target.value })}>
-                      {FIELD_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
-                    </select></div>
-                  <div className="field" style={{ alignSelf: "end", flex: 0 }}>
-                    <button type="button" className="danger small" onClick={() => removeField(idx)}>Remove</button>
-                  </div>
-                </div>
-              ))}
-              <div className="row" style={{ marginTop: ".4rem" }}>
-                <button type="button" className="ghost small" onClick={addField}>+ Add field</button>
-              </div>
-
               <div className="modal-form-actions">
                 <button type="button" className="ghost" onClick={() => setShowModal(false)}>Cancel</button>
                 <button type="submit" disabled={saving}>
                   {saving ? "Saving…" : editingId ? "Save changes" : "Add category"}
                 </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {viewing && (
+        <DetailModal
+          title={viewing.name}
+          onClose={() => setViewing(null)}
+          fields={[
+            { label: "Description", value: viewing.description },
+            { label: "Status", value: viewing.is_active ? "Active" : "Inactive" },
+            { label: "Created at", value: formatDate(viewing.created_at) },
+            { label: "Created by", value: viewing.created_by_name },
+            { label: "Updated at", value: formatDate(viewing.updated_at) },
+            { label: "Updated by", value: viewing.updated_by_name },
+          ]}
+        />
+      )}
+
+      {addBrandFor && (
+        <div className="modal-overlay" onClick={() => setAddBrandFor(null)}>
+          <div className="modal-box modal-box-form" onClick={(e) => e.stopPropagation()}>
+            <h3>Add Brand — {addBrandFor.name}</h3>
+            {brandError && <div className="error">{brandError}</div>}
+            <form onSubmit={submitBrand}>
+              <div className="field"><label>Brand name</label>
+                <input value={brandForm.name} placeholder="e.g. Apple"
+                  onChange={(e) => setBrandForm({ ...brandForm, name: e.target.value })} required /></div>
+              <div className="field"><label>Description</label>
+                <input value={brandForm.description} placeholder="Optional"
+                  onChange={(e) => setBrandForm({ ...brandForm, description: e.target.value })} /></div>
+              <div className="field"><label>Support phone</label>
+                <input value={brandForm.supporter_phone_number} placeholder="Optional"
+                  onChange={(e) => setBrandForm({ ...brandForm, supporter_phone_number: e.target.value })} /></div>
+              <div className="modal-form-actions">
+                <button type="button" className="ghost" onClick={() => setAddBrandFor(null)}>Cancel</button>
+                <button type="submit" disabled={brandSaving}>{brandSaving ? "Saving…" : "Add brand"}</button>
               </div>
             </form>
           </div>
