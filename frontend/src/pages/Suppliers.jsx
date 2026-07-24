@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ChevronDown, Eye, Pencil, Plus, Trash2 } from "lucide-react";
+import { Eye, Pencil, Plus, Trash2 } from "lucide-react";
 import { api, errorText, errorTitle } from "../api";
 import DetailModal from "../components/DetailModal";
+import DropdownButton from "../components/DropdownButton";
 import Modal from "../components/Modal";
 import Pagination from "../components/Pagination";
-import useClickOutside from "../hooks/useClickOutside";
+import { csvEscape, downloadCsv, fileTimestamp } from "../utils/csv";
 
 const emptyForm = {
   name: "", code: "", contact: "", phone: "", email: "", city: "", country: "",
@@ -40,54 +41,9 @@ const CATALOG_COLUMNS = [
   { key: "created_at", label: "Added" },
 ];
 
-function csvEscape(value) {
-  const s = String(value ?? "");
-  if (/[",\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
-  return s;
-}
-
 function formatDate(value) {
   if (!value) return "";
   return new Date(value).toLocaleString();
-}
-
-function fileTimestamp() {
-  const d = new Date();
-  const pad = (n) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
-}
-
-function downloadCsv(filename, header, rows, columns) {
-  const body = rows.map((row) => columns.map((c) => csvEscape(row[c.key])).join(",")).join("\n");
-  const blob = new Blob([header + "\n" + body], { type: "text/csv;charset=utf-8;" });
-  const link = document.createElement("a");
-  link.href = URL.createObjectURL(blob);
-  link.download = filename;
-  link.click();
-  URL.revokeObjectURL(link.href);
-}
-
-function DropdownButton({ label, ghost, disabled, children }) {
-  const [open, setOpen] = useState(false);
-  const ref = useClickOutside(() => setOpen(false));
-  return (
-    <div className="menu-wrap" ref={ref} style={{ position: "relative" }}>
-      <button
-        type="button"
-        className={ghost ? "ghost" : ""}
-        disabled={disabled}
-        style={{ whiteSpace: "nowrap" }}
-        onClick={() => setOpen((v) => !v)}
-      >
-        {label} <ChevronDown size={14} />
-      </button>
-      {open && (
-        <div className="menu-popover" style={{ minWidth: 200 }}>
-          {children(() => setOpen(false))}
-        </div>
-      )}
-    </div>
-  );
 }
 
 export default function Suppliers() {

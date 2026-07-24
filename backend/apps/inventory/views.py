@@ -339,6 +339,9 @@ class ProductReportViewSet(TenantAwareViewSet):
             if value:
                 qs = qs.filter(**{f"{lookup}__icontains": value})
 
+        if params.get("product_is_active") in ("true", "false"):
+            qs = qs.filter(sku__product__is_active=(params["product_is_active"] == "true"))
+
         for column in ("created_by_name", "updated_by_name"):
             value = params.get(column)
             if value:

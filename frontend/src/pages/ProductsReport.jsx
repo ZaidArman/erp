@@ -1,9 +1,18 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Eye, Layers, Pencil, Plus, Trash2 } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Eye, Layers, Package, Pencil, Plus, Trash2 } from "lucide-react";
 import { api, errorText } from "../api";
 import Brands from "./Brands";
 import DetailModal from "../components/DetailModal";
+import DropdownButton from "../components/DropdownButton";
 import Pagination from "../components/Pagination";
+import { csvEscape, downloadCsv, downloadTemplateCsv, fileTimestamp, parseCsvLine } from "../utils/csv";
+
+const IMPORT_TEMPLATE_COLUMNS = [
+  "name", "brand_name", "description", "model_number", "product_code",
+  "barcode", "qr_code", "warranty_required", "warranty_period", "warranty_terms",
+  "minimum_stock", "maximum_stock", "product_color",
+  "purchase_price", "cost_price", "selling_price",
+];
 
 const COLUMNS = [
   { key: "product_name", label: "Product" },
@@ -56,12 +65,6 @@ function formatDate(value) {
   return new Date(value).toLocaleString();
 }
 
-function csvEscape(value) {
-  const s = String(value ?? "");
-  if (/[",\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
-  return s;
-}
-
 function toDisplayRow(r) {
   return {
     id: r.id,
@@ -103,7 +106,11 @@ export default function ProductsReport() {
   const [pageSize, setPageSize] = useState(20);
   const [search, setSearch] = useState("");
   const [colFilters, setColFilters] = useState({});
+  const [statusFilter, setStatusFilter] = useState("all"); // active | inactive | all
   const [exporting, setExporting] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [importError, setImportError] = useState("");
+  const fileInputRef = useRef(null);
 
   const [showProductModal, setShowProductModal] = useState(false);
   const [editingId, setEditingId] = useState(null);
@@ -138,8 +145,9 @@ export default function ProductsReport() {
     Object.entries(colFilters).forEach(([key, value]) => {
       if (value && value.trim()) params.set(key, value.trim());
     });
+    if (statusFilter !== "all") params.set("product_is_active", statusFilter === "active" ? "true" : "false");
     return params;
-  }, [page, pageSize, search, colFilters]);
+  }, [page, pageSize, search, colFilters, statusFilter]);
 
   const load = useCallback(() => {
     api.get(`/inventory/product-report/?${queryParams}`).then((res) => {
@@ -159,10 +167,10 @@ export default function ProductsReport() {
   const goToPage = (p) => setPage(Math.min(Math.max(1, p), pageCount));
   const changePageSize = (n) => { setPageSize(n); setPage(1); };
 
-  const exportCsv = async () => {
+  const exportCsv = async (scope) => {
     setExporting(true);
     try {
-      const filterParams = new URLSearchParams(queryParams);
+      const filterParams = scope === "filtered" ? new URLSearchParams(queryParams) : new URLSearchParams();
       filterParams.set("page_size", "200");
       filterParams.delete("page");
       let url = `/inventory/product-report/?${filterParams}`;
@@ -173,15 +181,74 @@ export default function ProductsReport() {
         url = res.data.next ? res.data.next.replace(api.defaults.baseURL, "") : null;
       }
       const header = COLUMNS.map((c) => c.label).join(",");
-      const body = all.map((row) => COLUMNS.map((c) => csvEscape(row[c.key])).join(",")).join("\n");
-      const blob = new Blob([header + "\n" + body], { type: "text/csv;charset=utf-8;" });
-      const link = document.createElement("a");
-      link.href = URL.createObjectURL(blob);
-      link.download = `products-${new Date().toISOString().slice(0, 10)}.csv`;
-      link.click();
-      URL.revokeObjectURL(link.href);
+      downloadCsv(`${scope}_export_products_${fileTimestamp()}.csv`, header, all, COLUMNS);
     } finally {
       setExporting(false);
+    }
+  };
+
+  const downloadProductTemplate = () => {
+    downloadTemplateCsv("products_import_template.csv", IMPORT_TEMPLATE_COLUMNS.join(","));
+  };
+
+  const triggerImport = () => {
+    ensureBrandsLoaded();
+    fileInputRef.current?.click();
+  };
+
+  const handleImportFile = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setImporting(true);
+    setImportError("");
+    try {
+      const text = await file.text();
+      const lines = text.split(/\r?\n/).filter((l) => l.trim());
+      if (lines.length < 2) throw new Error("CSV has no data rows.");
+      const header = parseCsvLine(lines[0]).map((h) => h.trim().toLowerCase());
+      const idx = Object.fromEntries(IMPORT_TEMPLATE_COLUMNS.map((c) => [c, header.indexOf(c)]));
+      if (idx.name === -1 || idx.brand_name === -1) {
+        throw new Error("CSV must have at least name and brand_name columns.");
+      }
+
+      const brandsRes = brands.length ? { data: { results: brands } } : await api.get("/inventory/brands/?page_size=200");
+      const byBrandName = new Map(brandsRes.data.results.map((b) => [b.name.toLowerCase(), b]));
+
+      const created = [];
+      const skipped = [];
+      for (const line of lines.slice(1)) {
+        const cols = parseCsvLine(line);
+        const name = (cols[idx.name] || "").trim();
+        const brandName = (cols[idx.brand_name] || "").trim();
+        if (!name) continue;
+        const brand = byBrandName.get(brandName.toLowerCase());
+        if (!brand) { skipped.push(`${name} (brand "${brandName}" not found)`); continue; }
+
+        const payload = { name, brand: brand.id };
+        const optionalFields = IMPORT_TEMPLATE_COLUMNS.filter((c) => c !== "name" && c !== "brand_name");
+        for (const field of optionalFields) {
+          const raw = idx[field] !== -1 ? (cols[idx[field]] || "").trim() : "";
+          if (!raw) continue;
+          payload[field] = field === "warranty_required" ? /^(yes|true|1)$/i.test(raw) : raw;
+        }
+
+        try {
+          await api.post("/inventory/products/", payload);
+          created.push(name);
+        } catch (err) {
+          skipped.push(`${name} (${errorText(err)})`);
+        }
+      }
+
+      load();
+      if (skipped.length > 0) {
+        setImportError(`Imported ${created.length}, skipped ${skipped.length}: ${skipped.join("; ")}`);
+      }
+    } catch (err) {
+      setImportError(err.message || errorText(err));
+    } finally {
+      setImporting(false);
     }
   };
 
@@ -373,22 +440,90 @@ export default function ProductsReport() {
         <Brands />
       ) : (
         <>
-          <h2 className="page">Products ({count})</h2>
-          <div className="card">
-            <div className="row">
-              <div className="field" style={{ flex: 2 }}>
-                <label>Global search</label>
-                <input
-                  value={search}
-                  placeholder="Search across all columns…"
-                  onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-                />
+          <div
+            className="card"
+            style={{
+              display: "flex", justifyContent: "space-between", alignItems: "center",
+              background: "linear-gradient(120deg, var(--brand-700, #1d4ed8), var(--brand-500, #3b82f6))",
+              color: "#fff", border: "none",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: ".9rem" }}>
+              <div style={{
+                width: "2.4rem", height: "2.4rem", borderRadius: "var(--radius-lg)",
+                background: "rgba(255,255,255,.18)", display: "flex", alignItems: "center", justifyContent: "center",
+              }}>
+                <Package size={19} />
               </div>
-              <div className="field" style={{ alignSelf: "end", flex: 0, display: "flex", gap: ".6rem" }}>
-                <button className="ghost" onClick={openAddProduct}>+ Add Product</button>
-                <button className="ghost" onClick={exportCsv} disabled={exporting}>
-                  {exporting ? "Exporting…" : "Export CSV"}
-                </button>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: "1.05rem" }}>Products</div>
+                <div style={{ fontSize: ".82rem", opacity: .85 }}>Full catalog across every category and brand</div>
+              </div>
+            </div>
+            <div style={{ background: "rgba(255,255,255,.15)", borderRadius: "var(--radius-md)", padding: ".5rem .9rem", textAlign: "center" }}>
+              <div style={{ fontSize: ".65rem", fontWeight: 700, letterSpacing: ".05em", opacity: .85 }}>TOTAL</div>
+              <div style={{ fontSize: "1.15rem", fontWeight: 700 }}>{count}</div>
+            </div>
+          </div>
+
+          {importError && <div className="error">{importError}</div>}
+
+          <div className="card">
+            <div className="field" style={{ marginBottom: ".9rem" }}>
+              <label>Global search</label>
+              <input
+                value={search}
+                placeholder="Search across all columns…"
+                onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+              />
+            </div>
+            <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", gap: ".6rem" }}>
+              <div style={{ display: "flex", gap: ".4rem" }}>
+                {["active", "inactive", "all"].map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    className={statusFilter === s ? "" : "ghost"}
+                    style={{ whiteSpace: "nowrap" }}
+                    onClick={() => { setStatusFilter(s); setPage(1); }}
+                  >
+                    {s[0].toUpperCase() + s.slice(1)}
+                  </button>
+                ))}
+              </div>
+              <div style={{ display: "flex", gap: ".6rem" }}>
+                <DropdownButton label={importing ? "Importing…" : "Import"} ghost disabled={importing}>
+                  {(close) => (
+                    <>
+                      <button type="button" className="menu-item" onClick={() => { downloadProductTemplate(); close(); }}>
+                        Import Template
+                      </button>
+                      <button type="button" className="menu-item" onClick={() => { triggerImport(); close(); }}>
+                        Import
+                      </button>
+                    </>
+                  )}
+                </DropdownButton>
+                <DropdownButton label={exporting ? "Exporting…" : "Export"} ghost disabled={exporting}>
+                  {(close) => (
+                    <>
+                      <button type="button" className="menu-item" onClick={() => { exportCsv("all"); close(); }}>
+                        Export (All)
+                      </button>
+                      <button type="button" className="menu-item" onClick={() => { exportCsv("filtered"); close(); }}>
+                        Filtered Export
+                      </button>
+                    </>
+                  )}
+                </DropdownButton>
+                <button style={{ whiteSpace: "nowrap" }} onClick={openAddProduct}>+ Add Product</button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".csv"
+                  style={{ display: "none" }}
+                  onChange={handleImportFile}
+                />
               </div>
             </div>
           </div>
