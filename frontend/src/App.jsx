@@ -11,7 +11,6 @@ import {
   PackageSearch,
   Receipt,
   ShoppingCart,
-  Tag,
   Tags,
   TableProperties,
   TrendingUp,
@@ -28,7 +27,6 @@ import Dashboard from "./pages/Dashboard";
 import Employees from "./pages/Employees";
 import Login from "./pages/Login";
 import POS from "./pages/POS";
-import Products from "./pages/Products";
 import ProductsReport from "./pages/ProductsReport";
 import Reports from "./pages/Reports";
 import SalesHistory from "./pages/SalesHistory";
@@ -99,9 +97,6 @@ function Layout({ children }) {
             <NavGroup title="Inventory" collapsed={collapsed}>
               <NavLink to="/categories" className="nav-link" title="Categories">
                 <span className="nav-icon"><Tags size={17} /></span><span className="nav-text">Categories</span>
-              </NavLink>
-              <NavLink to="/products" className="nav-link" title="Products & SKUs">
-                <span className="nav-icon"><Tag size={17} /></span><span className="nav-text">Products &amp; SKUs</span>
               </NavLink>
               <NavLink to="/stock" className="nav-link" title="Stock">
                 <span className="nav-icon"><Boxes size={17} /></span><span className="nav-text">Stock</span>
@@ -185,7 +180,6 @@ export default function App() {
                   <Route path="reports" element={<Reports />} />
                   <Route path="stock" element={<StockList />} />
                   <Route path="stock/intake" element={<StockIntake />} />
-                  <Route path="products" element={<Products />} />
                   <Route path="categories" element={<Categories />} />
                   <Route path="brands" element={<Brands />} />
                   <Route

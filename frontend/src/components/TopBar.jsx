@@ -14,7 +14,6 @@ const ROUTE_TITLES = {
   "/reports": ["Reports"],
   "/stock": ["Inventory", "Stock"],
   "/stock/intake": ["Inventory", "Stock intake"],
-  "/products": ["Inventory", "Products & SKUs"],
   "/categories": ["Inventory", "Categories"],
   "/brands": ["Inventory", "Brands"],
   "/suppliers": ["Inventory", "Suppliers"],

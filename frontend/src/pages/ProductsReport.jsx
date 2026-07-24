@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Pencil, Trash2 } from "lucide-react";
+import { Layers, Pencil, Trash2 } from "lucide-react";
 import { api, errorText } from "../api";
 import Brands from "./Brands";
 import Pagination from "../components/Pagination";
@@ -111,6 +111,14 @@ export default function ProductsReport() {
   const [addError, setAddError] = useState("");
   const [saving, setSaving] = useState(false);
 
+  const [showSkuModal, setShowSkuModal] = useState(false);
+  const [skuProduct, setSkuProduct] = useState(null);
+  const [categories, setCategories] = useState([]);
+  const [skus, setSkus] = useState([]);
+  const [sForm, setSForm] = useState({ variant_name: "" });
+  const [sAttrs, setSAttrs] = useState({});
+  const [skuError, setSkuError] = useState("");
+
   const queryParams = useMemo(() => {
     const params = new URLSearchParams();
     params.set("page", String(page));
@@ -207,6 +215,60 @@ export default function ProductsReport() {
       load();
     } catch (err) {
       alert(errorText(err));
+    }
+  };
+
+  const ensureCategoriesLoaded = () => {
+    if (categories.length === 0) {
+      api.get("/inventory/categories/?page_size=200").then((res) => setCategories(res.data.results));
+    }
+  };
+
+  const selectedCategorySchema = useMemo(() => {
+    if (!skuProduct) return [];
+    const cat = categories.find((c) => c.id === skuProduct.category);
+    return cat?.attribute_schema || [];
+  }, [skuProduct, categories]);
+
+  const openManageSkus = async (productId) => {
+    setSkuError("");
+    setSForm({ variant_name: "" });
+    setSAttrs({});
+    ensureCategoriesLoaded();
+    const [productRes, skusRes] = await Promise.all([
+      api.get(`/inventory/products/${productId}/`),
+      api.get(`/inventory/skus/?product=${productId}`),
+    ]);
+    setSkuProduct(productRes.data);
+    setSkus(skusRes.data.results);
+    setShowSkuModal(true);
+  };
+
+  const refreshSkus = async () => {
+    if (!skuProduct) return;
+    const res = await api.get(`/inventory/skus/?product=${skuProduct.id}`);
+    setSkus(res.data.results);
+  };
+
+  const createSku = async (e) => {
+    e.preventDefault();
+    setSkuError("");
+    const attributes = {};
+    selectedCategorySchema.forEach((f) => {
+      if (sAttrs[f.key]) attributes[f.key] = sAttrs[f.key];
+    });
+    try {
+      await api.post("/inventory/skus/", {
+        product: skuProduct.id,
+        variant_name: sForm.variant_name,
+        attributes,
+      });
+      setSForm({ variant_name: "" });
+      setSAttrs({});
+      refreshSkus();
+      load();
+    } catch (err) {
+      setSkuError(errorText(err));
     }
   };
 
@@ -317,6 +379,14 @@ export default function ProductsReport() {
                       ))}
                       <td>
                         <div style={{ display: "flex", gap: ".4rem", justifyContent: "center" }}>
+                          <button
+                            className="icon-btn"
+                            title="Manage SKUs"
+                            aria-label="Manage SKUs"
+                            onClick={() => openManageSkus(r.product_id)}
+                          >
+                            <Layers size={15} />
+                          </button>
                           <button
                             className="icon-btn"
                             title="Edit product"
@@ -454,6 +524,59 @@ export default function ProductsReport() {
                 <button type="submit" disabled={saving}>{saving ? "Saving…" : editingId ? "Save changes" : "Add product"}</button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {showSkuModal && skuProduct && (
+        <div className="modal-overlay" onClick={() => setShowSkuModal(false)}>
+          <div className="modal-box modal-box-form" onClick={(e) => e.stopPropagation()}>
+            <h3>SKUs — {skuProduct.name} <span style={{ color: "#8a94a2", fontWeight: 400 }}>({skuProduct.category_name})</span></h3>
+            {skuError && <div className="error">{skuError}</div>}
+            <p style={{ fontSize: ".85rem", color: "#5c6673" }}>
+              Sell price: <strong>{skuProduct.selling_price ?? "not set — set it on the product first"}</strong>
+            </p>
+            <form className="row" onSubmit={createSku}>
+              <div className="field"><label>Variant name</label>
+                <input value={sForm.variant_name} placeholder="256GB Black"
+                  onChange={(e) => setSForm({ ...sForm, variant_name: e.target.value })} required /></div>
+              {selectedCategorySchema.map((f) => (
+                <div className="field" key={f.key}><label>{f.label}</label>
+                  <input
+                    type={f.type === "number" ? "number" : "text"}
+                    value={sAttrs[f.key] || ""}
+                    onChange={(e) => setSAttrs({ ...sAttrs, [f.key]: e.target.value })}
+                  /></div>
+              ))}
+              <div className="field" style={{ alignSelf: "end", flex: 0 }}><button>Add SKU</button></div>
+            </form>
+            {selectedCategorySchema.length === 0 && (
+              <p style={{ fontSize: ".78rem", color: "#8a94a2" }}>
+                This category has no custom fields yet — add some on the Categories page.
+              </p>
+            )}
+            <div className="table-scroll">
+              <table>
+                <thead><tr><th>Variant</th><th>Sell price</th><th>Attributes</th><th>Available units</th></tr></thead>
+                <tbody>
+                  {skus.map((s) => (
+                    <tr key={s.id}>
+                      <td>{s.variant_name}</td><td>{s.sell_price}</td>
+                      <td style={{ fontSize: ".8rem", color: "#5c6673" }}>
+                        {Object.entries(s.attributes || {}).map(([k, v]) => `${k}: ${v}`).join(", ") || "—"}
+                      </td>
+                      <td>{s.available_units}</td>
+                    </tr>
+                  ))}
+                  {skus.length === 0 && (
+                    <tr><td colSpan={4} style={{ color: "#8a94a2" }}>No SKUs yet — add one above.</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+            <div className="modal-form-actions">
+              <button type="button" className="ghost" onClick={() => setShowSkuModal(false)}>Close</button>
+            </div>
           </div>
         </div>
       )}
