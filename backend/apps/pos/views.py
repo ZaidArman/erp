@@ -4,7 +4,7 @@ The checkout transaction is the double-sell guarantee (PRD section 9.6):
 StockUnits are locked with select_for_update, so two simultaneous checkouts
 for the same unit cannot both succeed — the loser gets a clean 409.
 """
-from django.db import transaction
+from django.db import models, transaction
 from django.utils import timezone
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
@@ -19,7 +19,7 @@ from apps.core.viewsets import TenantScopedMixin
 from apps.inventory.models import StockUnit
 
 from .models import Receipt, ReceiptCounter, Sale, SaleItem
-from .serializers import CheckoutSerializer, SaleSerializer
+from .serializers import CheckoutSerializer, RecordPaymentSerializer, SaleSerializer
 
 
 class UnitConflict(APIException):
@@ -79,6 +79,10 @@ class SaleViewSet(TenantScopedMixin, mixins.ListModelMixin, mixins.RetrieveModel
             qs = qs.filter(created_at__date__lte=params["date_to"])
         if params.get("seller") and user.role == User.ROLE_ADMIN:
             qs = qs.filter(sold_by_id=params["seller"])
+        if params.get("payment_method"):
+            qs = qs.filter(payment_method=params["payment_method"])
+        if params.get("outstanding") == "true":
+            qs = qs.filter(payment_method=Sale.PAYMENT_CREDIT, amount_paid__lt=models.F("total_amount"))
         return qs
 
     @action(detail=False, methods=["post"])
@@ -123,13 +127,23 @@ class SaleViewSet(TenantScopedMixin, mixins.ListModelMixin, mixins.RetrieveModel
             # Server-side total from live SKU prices, snapshotted per item.
             total = sum(u.sku.sell_price for u in units)
 
+            payment_method = data.get("payment_method", Sale.PAYMENT_CASH)
+            if payment_method == Sale.PAYMENT_CREDIT:
+                amount_paid = data.get("amount_paid") or 0
+                if amount_paid > total:
+                    raise ValidationError({"amount_paid": "Cannot exceed the sale total."})
+            else:
+                amount_paid = total  # cash is always paid in full
+
             sale = Sale.objects.create(
                 tenant=tenant,
                 branch=branch,
                 sold_by=request.user,
                 customer_name=data.get("customer_name", ""),
-                payment_method=Sale.PAYMENT_CASH,
+                customer_phone=data.get("customer_phone", ""),
+                payment_method=payment_method,
                 total_amount=total,
+                amount_paid=amount_paid,
             )
             SaleItem.objects.bulk_create(
                 [
@@ -167,6 +181,28 @@ class SaleViewSet(TenantScopedMixin, mixins.ListModelMixin, mixins.RetrieveModel
         receipt.printed_at = timezone.now()
         receipt.save(update_fields=["printed_at"])
         return Response({"printed_at": receipt.printed_at})
+
+    @action(detail=True, methods=["post"], url_path="record-payment")
+    def record_payment(self, request, pk=None):
+        """Settle part or all of an outstanding credit sale's balance."""
+        sale = self.get_object()
+        serializer = RecordPaymentSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        amount = serializer.validated_data["amount"]
+
+        with transaction.atomic():
+            locked = Sale.objects.select_for_update().get(pk=sale.pk)
+            balance = locked.total_amount - locked.amount_paid
+            if amount > balance:
+                raise ValidationError({"amount": f"Exceeds the remaining balance of {balance}."})
+            locked.amount_paid += amount
+            locked.save(update_fields=["amount_paid"])
+            log_action(
+                request, "update", locked,
+                {"after": {"payment_recorded": str(amount), "new_amount_paid": str(locked.amount_paid)}},
+            )
+
+        return Response(SaleSerializer(locked).data)
 
 
 

@@ -11,6 +11,7 @@ const ROUTE_TITLES = {
   "/": ["Dashboard"],
   "/products-list": ["Products"],
   "/pos": ["Sales", "Point of sale"],
+  "/loans": ["Sales", "Loan"],
   "/sales": ["Sales", "Sales history"],
   "/reports": ["Reports"],
   "/stock": ["Inventory", "Stock"],

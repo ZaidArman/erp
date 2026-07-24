@@ -22,7 +22,14 @@ export default function Receipt({ sale }) {
       ))}
       <div className="r-line" />
       <div className="r-row r-bold r-lg"><span>TOTAL</span><span>{sale.total_amount}</span></div>
-      <div className="r-row"><span>Paid</span><span>Cash</span></div>
+      {sale.payment_method === "credit" ? (
+        <>
+          <div className="r-row"><span>Paid now</span><span>{sale.amount_paid}</span></div>
+          <div className="r-row r-bold"><span>Balance (loan)</span><span>{sale.balance_due}</span></div>
+        </>
+      ) : (
+        <div className="r-row"><span>Paid</span><span>Cash</span></div>
+      )}
       <div className="r-line" />
       <div className="r-center" style={{ marginTop: "6px" }}>Thank you for your purchase!</div>
       <div className="r-center">Keep this receipt for warranty claims.</div>

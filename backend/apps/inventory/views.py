@@ -160,7 +160,11 @@ class SKUViewSet(TenantAwareViewSet):
         return [MANAGE_INVENTORY()]
 
     def get_queryset(self):
-        qs = super().get_queryset()
+        # Product's default manager already hides soft-deleted products, but
+        # that filtering doesn't propagate across an FK join like this one —
+        # exclude them explicitly so a deleted product's SKUs can't still be
+        # picked for stock intake.
+        qs = super().get_queryset().filter(product__deleted_at__isnull=True)
         product = self.request.query_params.get("product")
         if product:
             qs = qs.filter(product_id=product)
@@ -186,7 +190,10 @@ class StockUnitViewSet(TenantAwareViewSet):
         return [MANAGE_INVENTORY()]
 
     def get_queryset(self):
-        qs = super().get_queryset()
+        # Deleted products stay in the DB (soft delete keeps the audit trail),
+        # but their stock units shouldn't still show up in the everyday Stock
+        # list — same filter ProductReportViewSet already applies.
+        qs = super().get_queryset().filter(sku__product__deleted_at__isnull=True)
         params = self.request.query_params
         if params.get("branch"):
             qs = qs.filter(branch_id=params["branch"])

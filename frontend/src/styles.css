@@ -499,6 +499,29 @@ button.small { padding: .38rem .75rem; font-size: .83rem; }
 .empty-state h4 { font-size: .95rem; color: var(--text); margin-bottom: .3rem; }
 .empty-state p { font-size: .85rem; max-width: 320px; margin-bottom: 1rem; }
 
+/* ---------- POS ---------- */
+.pos-grid { display: grid; grid-template-columns: 1.7fr 1fr; gap: 1.25rem; align-items: start; }
+@media (max-width: 980px) { .pos-grid { grid-template-columns: 1fr; } }
+.pos-card-label {
+  font-size: .72rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--text-tertiary); margin-bottom: .8rem;
+}
+.pos-pay-toggle { display: flex; gap: .7rem; }
+button.pos-pay-option {
+  flex: 1; padding: .7rem; border-radius: var(--radius-md); border: 1px solid var(--border-strong);
+  text-align: center; font-weight: 600; font-size: .85rem; color: var(--text-secondary);
+  display: flex; align-items: center; justify-content: center; gap: .4rem; cursor: pointer;
+  background: var(--surface); box-shadow: none;
+}
+button.pos-pay-option.active { border-color: var(--success-500); background: var(--success-50); color: var(--success-700); }
+.pos-cart-item {
+  display: flex; align-items: center; gap: .8rem; padding: .7rem .2rem; border-bottom: 1px solid var(--border);
+}
+.pos-cart-item:last-child { border-bottom: none; }
+.pos-cart-item .meta { flex: 1; min-width: 0; }
+.pos-cart-item .meta .imei { font-family: monospace; font-size: .78rem; color: var(--text-tertiary); }
+.pos-cart-item .price { font-weight: 700; white-space: nowrap; }
+
 /* ---------- Toasts ---------- */
 .toast-stack { position: fixed; bottom: 1.5rem; right: 1.5rem; display: flex; flex-direction: column; gap: .6rem; z-index: 2000; }
 .toast {

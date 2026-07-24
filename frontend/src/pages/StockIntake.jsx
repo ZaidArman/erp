@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { api, errorText } from "../api";
 
 export default function StockIntake() {
@@ -22,6 +22,18 @@ export default function StockIntake() {
   }, []);
 
   const selectedSku = skus.find((s) => String(s.id) === String(form.sku));
+
+  // Shown to the user as "Product" — the variant suffix is only added when a
+  // product has more than one SKU variant, so single-variant products (the
+  // common case) just show the product name.
+  const productOptions = useMemo(() => {
+    const countByProduct = {};
+    skus.forEach((s) => { countByProduct[s.product] = (countByProduct[s.product] || 0) + 1; });
+    return skus.map((s) => ({
+      id: s.id,
+      label: countByProduct[s.product] > 1 ? `${s.product_name} (${s.variant_name})` : s.product_name,
+    }));
+  }, [skus]);
 
   const submit = async (e) => {
     e.preventDefault();
@@ -47,10 +59,10 @@ export default function StockIntake() {
       <div className="card">
         <form onSubmit={submit}>
           <div className="row">
-            <div className="field"><label>SKU</label>
+            <div className="field"><label>Product</label>
               <select value={form.sku} onChange={(e) => setForm({ ...form, sku: e.target.value })} required>
                 <option value="">Select…</option>
-                {skus.map((s) => <option key={s.id} value={s.id}>{s.product_name} — {s.variant_name}</option>)}
+                {productOptions.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
               </select></div>
             <div className="field"><label>Branch</label>
               <select value={form.branch} onChange={(e) => setForm({ ...form, branch: e.target.value })} required>
@@ -74,7 +86,7 @@ export default function StockIntake() {
             <div className="field"><label>Purchase cost (per unit)</label>
               <input
                 value={selectedSku?.product_purchase_price ?? ""}
-                placeholder={selectedSku ? "Not set on product" : "Select a SKU"}
+                placeholder={selectedSku ? "Not set on product" : "Select a product"}
                 disabled
               /></div>
             <div className="field"><label>Warranty expiry (optional)</label>

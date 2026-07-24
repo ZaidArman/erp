@@ -12,21 +12,31 @@ from apps.core.models import TenantAwareModel
 
 class Sale(TenantAwareModel):
     PAYMENT_CASH = "cash"
-    PAYMENT_CHOICES = [(PAYMENT_CASH, "Cash")]  # more methods post-MVP
+    PAYMENT_CREDIT = "credit"
+    PAYMENT_CHOICES = [(PAYMENT_CASH, "Cash"), (PAYMENT_CREDIT, "Credit (loan)")]
 
     branch = models.ForeignKey("tenants.Branch", on_delete=models.PROTECT, related_name="sales")
     sold_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="sales"
     )
     customer_name = models.CharField(max_length=255, blank=True, default="")
+    customer_phone = models.CharField(max_length=32, blank=True, default="")
     payment_method = models.CharField(max_length=20, choices=PAYMENT_CHOICES, default=PAYMENT_CASH)
     total_amount = models.DecimalField(max_digits=14, decimal_places=2)
+    # Cash sales are always paid in full at checkout; credit (loan) sales can
+    # start at 0 (or a partial down-payment) and get settled later via
+    # SaleViewSet.record_payment.
+    amount_paid = models.DecimalField(max_digits=14, decimal_places=2, default=0)
 
     class Meta:
         ordering = ["-created_at"]
 
     def __str__(self):
         return f"Sale #{self.pk} — {self.total_amount}"
+
+    @property
+    def balance_due(self):
+        return self.total_amount - self.amount_paid
 
 
 class SaleItem(models.Model):

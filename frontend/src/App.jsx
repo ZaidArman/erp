@@ -6,6 +6,7 @@ import {
   ChevronRight,
   ChevronsLeft,
   ChevronsRight,
+  HandCoins,
   LayoutDashboard,
   LogOut,
   PackageSearch,
@@ -25,6 +26,7 @@ import Brands from "./pages/Brands";
 import Categories from "./pages/Categories";
 import Dashboard from "./pages/Dashboard";
 import Employees from "./pages/Employees";
+import Loans from "./pages/Loans";
 import Login from "./pages/Login";
 import POS from "./pages/POS";
 import ProductsReport from "./pages/ProductsReport";
@@ -116,6 +118,9 @@ function Layout({ children }) {
                 <span className="nav-icon"><ShoppingCart size={17} /></span><span className="nav-text">Point of sale</span>
               </NavLink>
             )}
+            <NavLink to="/loans" className="nav-link" title="Loan">
+              <span className="nav-icon"><HandCoins size={17} /></span><span className="nav-text">Loan</span>
+            </NavLink>
             <NavLink to="/sales" className="nav-link" title="Sales history">
               <span className="nav-icon"><Receipt size={17} /></span><span className="nav-text">Sales history</span>
             </NavLink>
@@ -176,6 +181,7 @@ export default function App() {
                   <Route index element={<Dashboard />} />
                   <Route path="products-list" element={<ProductsReport />} />
                   <Route path="pos" element={<POS />} />
+                  <Route path="loans" element={<Loans />} />
                   <Route path="sales" element={<SalesHistory />} />
                   <Route path="reports" element={<Reports />} />
                   <Route path="stock" element={<StockList />} />

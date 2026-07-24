@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { Check, CreditCard, ScanLine, ShoppingCart, Trash2 } from "lucide-react";
 import { api, errorText } from "../api";
 import { useAuth } from "../AuthContext";
 import Receipt from "../components/Receipt";
@@ -9,6 +10,9 @@ export default function POS() {
   const [branch, setBranch] = useState("");
   const [imei, setImei] = useState("");
   const [customer, setCustomer] = useState("");
+  const [customerPhone, setCustomerPhone] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState("cash");
+  const [amountPaid, setAmountPaid] = useState("");
   const [cart, setCart] = useState([]);
   const [error, setError] = useState("");
   const [sale, setSale] = useState(null); // completed sale -> receipt view
@@ -57,19 +61,29 @@ export default function POS() {
   const removeFromCart = (id) => setCart(cart.filter((u) => u.id !== id));
 
   const total = cart.reduce((sum, u) => sum + Number(u.sell_price || 0), 0);
+  const isCredit = paymentMethod === "credit";
 
   const checkout = async () => {
     setError("");
     setBusy(true);
     try {
-      const res = await api.post("/pos/sales/checkout/", {
+      const payload = {
         stock_unit_ids: cart.map((u) => u.id),
         branch: Number(branch),
         customer_name: customer,
-      });
+        payment_method: paymentMethod,
+      };
+      if (isCredit) {
+        payload.customer_phone = customerPhone;
+        if (amountPaid !== "") payload.amount_paid = amountPaid;
+      }
+      const res = await api.post("/pos/sales/checkout/", payload);
       setSale(res.data);
       setCart([]);
       setCustomer("");
+      setCustomerPhone("");
+      setAmountPaid("");
+      setPaymentMethod("cash");
     } catch (err) {
       setError(errorText(err));
     } finally {
@@ -83,11 +97,14 @@ export default function POS() {
   };
 
   if (sale) {
+    const isSaleCredit = sale.payment_method === "credit";
     return (
       <>
         <h2 className="page no-print">Sale complete — Receipt #{sale.receipt.receipt_number}</h2>
         <div className="ok no-print">
-          Total {sale.total_amount} received in cash. Stock updated.
+          {isSaleCredit
+            ? `Total ${sale.total_amount} — ${sale.amount_paid} paid now, ${sale.balance_due} on credit. Stock updated.`
+            : `Total ${sale.total_amount} received in cash. Stock updated.`}
         </div>
         <div className="card no-print" style={{ display: "flex", gap: ".8rem" }}>
           <button onClick={printReceipt}>Print receipt</button>
@@ -103,73 +120,137 @@ export default function POS() {
       <h2 className="page">Point of sale</h2>
       {error && <div className="error">{error}</div>}
 
-      <div className="card">
-        <div className="row">
-          <div className="field">
-            <label>Branch</label>
-            <select
-              value={branch}
-              onChange={(e) => { setBranch(e.target.value); setCart([]); }}
-              disabled={user.role === "employee" && Boolean(user.branch)}
-            >
-              {branches.map((b) => (
-                <option key={b.id} value={b.id}>{b.name}</option>
-              ))}
-            </select>
+      <div className="pos-grid">
+        {/* Left column: scan + cart */}
+        <div>
+          <div className="card">
+            <div className="pos-card-label">Scan item</div>
+            <div className="row">
+              <div className="field">
+                <label>Branch</label>
+                <select
+                  value={branch}
+                  onChange={(e) => { setBranch(e.target.value); setCart([]); }}
+                  disabled={user.role === "employee" && Boolean(user.branch)}
+                >
+                  {branches.map((b) => (
+                    <option key={b.id} value={b.id}>{b.name}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <form onSubmit={addByImei} className="row" style={{ marginTop: ".2rem" }}>
+              <div className="field" style={{ flex: 2 }}>
+                <label>Scan / type IMEI and press Enter</label>
+                <div style={{ position: "relative" }}>
+                  <ScanLine
+                    size={16}
+                    style={{ position: "absolute", left: ".8rem", top: "50%", transform: "translateY(-50%)", color: "var(--text-tertiary)" }}
+                  />
+                  <input
+                    ref={imeiRef}
+                    autoFocus
+                    value={imei}
+                    onChange={(e) => setImei(e.target.value)}
+                    placeholder="358743110912345"
+                    style={{ fontFamily: "monospace", paddingLeft: "2.1rem" }}
+                  />
+                </div>
+              </div>
+              <div className="field" style={{ alignSelf: "end", flex: 0 }}>
+                <button type="submit">Add to cart</button>
+              </div>
+            </form>
           </div>
-          <div className="field">
-            <label>Customer name (optional)</label>
-            <input value={customer} onChange={(e) => setCustomer(e.target.value)} />
+
+          <div className="card">
+            <div className="pos-card-label">Cart ({cart.length})</div>
+            {cart.length === 0 ? (
+              <div className="empty-state">
+                <div className="icon-wrap"><ShoppingCart size={20} /></div>
+                <h4>Cart is empty</h4>
+                <p>Scan an IMEI above to add a unit to the sale.</p>
+              </div>
+            ) : (
+              <div>
+                {cart.map((u) => (
+                  <div className="pos-cart-item" key={u.id}>
+                    <div className="meta">
+                      <div>{u.sku_label} <span className="badge gray">{u.condition}</span></div>
+                      <div className="imei">{u.imei_serial}</div>
+                    </div>
+                    <div className="price">{Number(u.sell_price).toFixed(2)}</div>
+                    <button className="icon-btn icon-btn-danger" title="Remove" aria-label="Remove" onClick={() => removeFromCart(u.id)}>
+                      <Trash2 size={15} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
-        <form onSubmit={addByImei} className="row">
-          <div className="field" style={{ flex: 2 }}>
-            <label>Scan / type IMEI and press Enter</label>
-            <input
-              ref={imeiRef}
-              autoFocus
-              value={imei}
-              onChange={(e) => setImei(e.target.value)}
-              placeholder="358743110912345"
-              style={{ fontFamily: "monospace" }}
-            />
-          </div>
-          <div className="field" style={{ alignSelf: "end", flex: 0 }}>
-            <button type="submit">Add to cart</button>
-          </div>
-        </form>
-      </div>
 
-      <div className="card">
-        <h3>Cart ({cart.length})</h3>
-        <table>
-          <thead>
-            <tr><th>IMEI</th><th>Item</th><th>Condition</th><th style={{ textAlign: "right" }}>Price</th><th /></tr>
-          </thead>
-          <tbody>
-            {cart.map((u) => (
-              <tr key={u.id}>
-                <td style={{ fontFamily: "monospace" }}>{u.imei_serial}</td>
-                <td>{u.sku_label}</td>
-                <td><span className="badge gray">{u.condition}</span></td>
-                <td style={{ textAlign: "right" }}>{Number(u.sell_price).toFixed(2)}</td>
-                <td style={{ textAlign: "right" }}>
-                  <button className="danger small" onClick={() => removeFromCart(u.id)}>Remove</button>
-                </td>
-              </tr>
-            ))}
-            {cart.length === 0 && (
-              <tr><td colSpan={5} style={{ color: "#8a94a2" }}>Cart is empty — scan an IMEI above.</td></tr>
+        {/* Right column: customer info + payment + checkout */}
+        <div>
+          <div className="card">
+            <div className="pos-card-label">Customer info {isCredit ? "" : "(optional)"}</div>
+            <div className="field">
+              <label>Customer name</label>
+              <input value={customer} onChange={(e) => setCustomer(e.target.value)} placeholder="Walk-in customer" />
+            </div>
+            {isCredit && (
+              <div className="field">
+                <label>Customer phone</label>
+                <input value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} placeholder="For loan reminders" />
+              </div>
             )}
-          </tbody>
-        </table>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "1rem" }}>
-          <div style={{ fontSize: "1.15rem" }}>
-            Total: <b>{total.toFixed(2)}</b> <span style={{ color: "#8a94a2", fontSize: ".85rem" }}>(cash)</span>
           </div>
-          <button disabled={cart.length === 0 || busy} onClick={checkout}>
-            {busy ? "Processing…" : "Complete sale (cash)"}
-          </button>
+
+          <div className="card">
+            <div className="pos-card-label">Payment</div>
+            <div className="pos-pay-toggle">
+              <button
+                type="button"
+                className={`pos-pay-option${!isCredit ? " active" : ""}`}
+                onClick={() => setPaymentMethod("cash")}
+              >
+                <Check size={15} /> Cash
+              </button>
+              <button
+                type="button"
+                className={`pos-pay-option${isCredit ? " active" : ""}`}
+                onClick={() => setPaymentMethod("credit")}
+              >
+                <CreditCard size={15} /> Credit (loan)
+              </button>
+            </div>
+            {isCredit && (
+              <div className="field" style={{ marginTop: ".9rem", marginBottom: 0 }}>
+                <label>Amount paid now (optional)</label>
+                <input
+                  type="number" min="0" step="0.01"
+                  value={amountPaid}
+                  onChange={(e) => setAmountPaid(e.target.value)}
+                  placeholder="0.00 — rest becomes a loan balance"
+                />
+              </div>
+            )}
+          </div>
+
+          <div className="card">
+            <div className="pos-card-label">Order summary</div>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: "1.15rem", marginBottom: "1rem" }}>
+              <span>Total</span>
+              <b>{total.toFixed(2)}</b>
+            </div>
+            <button
+              style={{ width: "100%" }}
+              disabled={cart.length === 0 || busy}
+              onClick={checkout}
+            >
+              {busy ? "Processing…" : isCredit ? "Complete sale (credit)" : "Complete sale (cash)"}
+            </button>
+          </div>
         </div>
       </div>
     </>

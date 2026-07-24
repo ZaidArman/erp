@@ -5,7 +5,6 @@ import Pagination from "../components/Pagination";
 const COLUMNS = [
   { key: "product_name", label: "Product" },
   { key: "brand_name", label: "Brand" },
-  { key: "sku_label", label: "SKU" },
   { key: "sell_price", label: "Price" },
   { key: "imei_serial", label: "IMEI / serial" },
   { key: "branch_name", label: "Branch" },
@@ -49,7 +48,6 @@ export default function StockList() {
       id: u.id,
       product_name: u.product_name || "",
       brand_name: u.brand_name || "",
-      sku_label: u.sku_label || "",
       sell_price: u.sell_price ?? "",
       imei_serial: u.imei_serial || "",
       branch_name: u.branch_name || "",
@@ -130,7 +128,7 @@ export default function StockList() {
           <label>Search this page</label>
           <input
             value={search}
-            placeholder="Search across product, brand, SKU, IMEI, branch…"
+            placeholder="Search across product, brand, IMEI, branch…"
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
@@ -161,7 +159,6 @@ export default function StockList() {
                 <tr key={r.id}>
                   <td title={r.product_name}>{r.product_name}</td>
                   <td title={r.brand_name}>{r.brand_name}</td>
-                  <td title={r.sku_label}>{r.sku_label}</td>
                   <td>{r.sell_price}</td>
                   <td style={{ fontFamily: "monospace" }}>{r.imei_serial}</td>
                   <td title={r.branch_name}>{r.branch_name}</td>
