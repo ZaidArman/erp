@@ -5,7 +5,16 @@ from apps.core.serializers import TenantPKRelatedField
 from apps.core.validators import validate_phone_number
 from apps.tenants.models import Branch
 
-from .models import SKU, Brand, Category, Product, StockUnit, StockWarranty, Supplier
+from .models import (
+    SKU,
+    Brand,
+    Category,
+    Product,
+    StockUnit,
+    StockWarranty,
+    Supplier,
+    SupplierCatalogItem,
+)
 
 
 class CategorySerializer(serializers.ModelSerializer):
@@ -49,9 +58,41 @@ class BrandSerializer(serializers.ModelSerializer):
 
 
 class SupplierSerializer(serializers.ModelSerializer):
+    """created_by_name / updated_by_name are annotated onto the queryset by
+    SupplierViewSet (AuditLog subqueries) — same pattern as BrandSerializer."""
+
+    created_by_name = serializers.CharField(read_only=True, allow_null=True, required=False)
+    updated_by_name = serializers.CharField(read_only=True, allow_null=True, required=False)
+
     class Meta:
         model = Supplier
-        fields = ["id", "name", "contact"]
+        fields = [
+            "id", "name", "code", "contact", "phone", "email", "city", "country",
+            "address", "license_no", "tax_no", "ntn", "bank_account", "payment_terms",
+            "credit_limit", "is_active",
+            "created_at", "updated_at", "created_by_name", "updated_by_name",
+        ]
+        read_only_fields = ["created_at", "updated_at"]
+
+    def validate_phone(self, value):
+        return validate_phone_number(value)
+
+
+class SupplierCatalogItemSerializer(serializers.ModelSerializer):
+    supplier = TenantPKRelatedField(queryset=Supplier.objects.all())
+    product = TenantPKRelatedField(queryset=Product.objects.all())
+    product_name = serializers.CharField(source="product.name", read_only=True)
+    product_code = serializers.CharField(source="product.product_code", read_only=True)
+    brand_name = serializers.CharField(source="product.brand.name", read_only=True)
+    category_name = serializers.CharField(source="product.category.name", read_only=True)
+
+    class Meta:
+        model = SupplierCatalogItem
+        fields = [
+            "id", "supplier", "product", "product_name", "product_code",
+            "brand_name", "category_name", "supplier_cost", "notes", "created_at",
+        ]
+        read_only_fields = ["created_at"]
 
 
 class ProductSerializer(serializers.ModelSerializer):

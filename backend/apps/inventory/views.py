@@ -11,7 +11,16 @@ from apps.core.audit import audit_name_subquery, log_action
 from apps.core.pagination import StandardPagination
 from apps.core.viewsets import TenantAwareViewSet
 
-from .models import SKU, Brand, Category, Product, StockUnit, StockWarranty, Supplier
+from .models import (
+    SKU,
+    Brand,
+    Category,
+    Product,
+    StockUnit,
+    StockWarranty,
+    Supplier,
+    SupplierCatalogItem,
+)
 from .serializers import (
     BrandSerializer,
     BulkIntakeSerializer,
@@ -21,6 +30,7 @@ from .serializers import (
     SKUSerializer,
     StockUnitSerializer,
     StockWarrantySerializer,
+    SupplierCatalogItemSerializer,
     SupplierSerializer,
 )
 
@@ -59,6 +69,64 @@ class SupplierViewSet(TenantAwareViewSet):
     queryset = Supplier.objects.all()
     serializer_class = SupplierSerializer
     permission_classes = [MANAGE_INVENTORY]
+
+    def get_queryset(self):
+        return super().get_queryset().annotate(
+            created_by_name=audit_name_subquery("Supplier", action_filter="create"),
+            updated_by_name=audit_name_subquery("Supplier"),
+        )
+
+
+class SupplierCatalogItemViewSet(TenantAwareViewSet):
+    queryset = SupplierCatalogItem.objects.select_related(
+        "supplier", "product__brand", "product__category"
+    )
+    serializer_class = SupplierCatalogItemSerializer
+    permission_classes = [MANAGE_INVENTORY]
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        params = self.request.query_params
+        if params.get("supplier"):
+            qs = qs.filter(supplier_id=params["supplier"])
+        search = params.get("search")
+        if search:
+            qs = qs.filter(
+                Q(product__name__icontains=search)
+                | Q(product__product_code__icontains=search)
+                | Q(product__brand__name__icontains=search)
+            )
+        return qs
+
+    @action(detail=False, methods=["post"], url_path="bulk-create")
+    def bulk_create(self, request):
+        tenant = self.get_tenant()
+        supplier_id = request.data.get("supplier")
+        items = request.data.get("items", [])
+        supplier = Supplier.objects.filter(tenant=tenant, id=supplier_id).first()
+        if not supplier:
+            raise drf_serializers.ValidationError({"supplier": "Select a valid supplier."})
+
+        created, skipped = [], []
+        for row in items:
+            serializer = SupplierCatalogItemSerializer(
+                data={**row, "supplier": supplier.id}, context={"request": request}
+            )
+            if not serializer.is_valid():
+                skipped.append({"product": row.get("product"), "errors": serializer.errors})
+                continue
+            try:
+                with transaction.atomic():
+                    instance = serializer.save(tenant=tenant)
+            except IntegrityError:
+                skipped.append({"product": row.get("product"), "errors": "Already in this supplier's catalog."})
+                continue
+            log_action(request, "create", instance, {"after": {"product_id": instance.product_id}})
+            created.append(SupplierCatalogItemSerializer(instance).data)
+
+        return Response(
+            {"created": created, "skipped": skipped}, status=status.HTTP_201_CREATED
+        )
 
 
 class ProductViewSet(TenantAwareViewSet):

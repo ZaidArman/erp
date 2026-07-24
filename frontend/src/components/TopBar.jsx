@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useLocation } from "react-router-dom";
 import {
   Bell, ChevronRight, LogOut, Moon, Settings, Sun, User,
 } from "lucide-react";
 import { useAuth } from "../AuthContext";
 import { applyTheme, getInitialTheme } from "../theme";
+import useClickOutside from "../hooks/useClickOutside";
 
 const ROUTE_TITLES = {
   "/": ["Dashboard"],
@@ -31,17 +32,6 @@ function initials(user) {
     .join("") || "?";
 }
 
-function useClickOutside(onClose) {
-  const ref = useRef(null);
-  useEffect(() => {
-    const handler = (e) => {
-      if (ref.current && !ref.current.contains(e.target)) onClose();
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [onClose]);
-  return ref;
-}
 
 export default function TopBar() {
   const { user, logout } = useAuth();

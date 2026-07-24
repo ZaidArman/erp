@@ -1,8 +1,8 @@
 from django.contrib import admin
 
-from .models import SKU, Brand, Category, Product, StockUnit, Supplier
+from .models import SKU, Brand, Category, Product, StockUnit, Supplier, SupplierCatalogItem
 
-for model in (Category, Brand, Supplier):
+for model in (Category, Brand, Supplier, SupplierCatalogItem):
     admin.site.register(model)
 
 

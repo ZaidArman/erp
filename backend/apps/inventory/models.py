@@ -49,9 +49,26 @@ class Brand(TenantAwareModel, SoftDeleteModel):
         return self.name
 
 
-class Supplier(TenantAwareModel):
+class Supplier(TenantAwareModel, SoftDeleteModel):
     name = models.CharField(max_length=255)
     contact = models.CharField(max_length=255, blank=True, default="")
+    code = models.CharField(max_length=50, blank=True, default="")
+    phone = models.CharField(max_length=32, blank=True, default="")
+    email = models.EmailField(blank=True, default="")
+    city = models.CharField(max_length=100, blank=True, default="")
+    country = models.CharField(max_length=100, blank=True, default="")
+    address = models.TextField(blank=True, default="")
+    license_no = models.CharField(max_length=100, blank=True, default="")
+    tax_no = models.CharField(max_length=100, blank=True, default="")
+    ntn = models.CharField(max_length=100, blank=True, default="")
+    bank_account = models.CharField(max_length=100, blank=True, default="")
+    payment_terms = models.CharField(max_length=255, blank=True, default="")
+    credit_limit = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    is_active = models.BooleanField(default=True)
+    deleted_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="+",
+    )
 
     class Meta:
         unique_together = ("tenant", "name")
@@ -59,6 +76,24 @@ class Supplier(TenantAwareModel):
 
     def __str__(self):
         return self.name
+
+
+class SupplierCatalogItem(TenantAwareModel):
+    """Which products a given supplier delivers, plus what that supplier
+    charges for it — distinct from Product.purchase_price, which is the
+    shop's own cost figure regardless of supplier."""
+
+    supplier = models.ForeignKey(Supplier, on_delete=models.CASCADE, related_name="catalog_items")
+    product = models.ForeignKey("Product", on_delete=models.PROTECT, related_name="supplier_catalog_items")
+    supplier_cost = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    notes = models.CharField(max_length=255, blank=True, default="")
+
+    class Meta:
+        unique_together = ("tenant", "supplier", "product")
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.supplier.name} — {self.product.name}"
 
 
 class Product(TenantAwareModel, SoftDeleteModel):

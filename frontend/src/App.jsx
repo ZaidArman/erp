@@ -30,7 +30,7 @@ import POS from "./pages/POS";
 import ProductsReport from "./pages/ProductsReport";
 import Reports from "./pages/Reports";
 import SalesHistory from "./pages/SalesHistory";
-import SimpleCrud from "./pages/SimpleCrud";
+import Suppliers from "./pages/Suppliers";
 import StockIntake from "./pages/StockIntake";
 import StockList from "./pages/StockList";
 
@@ -182,16 +182,7 @@ export default function App() {
                   <Route path="stock/intake" element={<StockIntake />} />
                   <Route path="categories" element={<Categories />} />
                   <Route path="brands" element={<Brands />} />
-                  <Route
-                    path="suppliers"
-                    element={
-                      <SimpleCrud
-                        title="Suppliers"
-                        endpoint="/inventory/suppliers/"
-                        extraField="contact"
-                      />
-                    }
-                  />
+                  <Route path="suppliers" element={<Suppliers />} />
                   <Route path="branches" element={<Branches />} />
                   <Route path="employees" element={<Employees />} />
                 </Routes>
